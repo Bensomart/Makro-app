@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#0b0b0d">
+<title>Makro-Tracker</title>
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&family=Fraunces:opsz,wght@9..144,500;9..144,600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0b0b0d;--card:#151518;--line:#26262b;--tx:#f3f0e9;--mut:#8f8b83;--acc:#dcbb78;--warn:#e8a04c;--bad:#f07167;--kh:#86b6f6;--pr:#8fd9b0;--ft:#f0b46a;--serif:'Fraunces',Georgia,serif}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.5 "DM Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+body{padding-bottom:84px}
+main{max-width:560px;margin:0 auto;padding:14px}
+h1{font:600 28px/1.15 var(--serif);margin:10px 0 16px;letter-spacing:-.01em}
+h2{font:600 22px/1.2 var(--serif);margin:26px 2px 10px}
+h3{font-size:11px;margin:14px 0 8px;color:var(--mut);font-weight:700;text-transform:uppercase;letter-spacing:.12em}
+a{color:var(--acc)}
+.card{background:var(--card);border-radius:22px;padding:18px;margin:12px 0}
+.row{display:flex;align-items:center;gap:10px}
+.sp{justify-content:space-between}
+.mut{color:var(--mut)}.sm{font-size:13px}.big{font:600 38px/1.05 var(--serif)}
+.num{font-variant-numeric:tabular-nums}
+button,.btn{font:inherit;color:var(--tx);background:#222227;border:0;border-radius:99px;padding:11px 18px;cursor:pointer;min-height:46px;font-weight:500}
+button.pri{background:var(--acc);color:#17120a;font-weight:700}
+button.ghost{background:none;border-color:transparent;color:var(--acc);padding:8px}
+button.dng{color:var(--bad)}
+button:disabled{opacity:.5}
+.full{width:100%}
+input,textarea,select{font:inherit;color:var(--tx);background:#0e0e11;border:1px solid var(--line);border-radius:16px;padding:12px 14px;width:100%}
+input:focus,textarea:focus,select:focus{outline:0;border-color:var(--acc)}
+textarea{min-height:92px;resize:vertical}
+label{display:block;font-size:13px;color:var(--mut);margin:10px 0 4px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.bar{height:6px;background:#26262b;border-radius:6px;overflow:hidden}
+.bar>i{display:block;height:100%;background:var(--acc);border-radius:6px}
+.bar>i.over{background:var(--warn)}
+.mac{flex:1;text-align:center}
+.mac b{display:block;font-size:13px;margin-top:5px}
+.meal{display:flex;gap:12px;align-items:center;padding:10px 0;border-top:1px solid var(--line);cursor:pointer}
+.meal:first-of-type{border-top:0}
+.th{color:var(--mut);width:56px;height:56px;border-radius:16px;background:#222227 center/cover;flex:none;display:grid;place-items:center;font-size:22px}
+.grow{flex:1;min-width:0}
+.ell{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tag{display:inline-block;font-size:11px;padding:3px 10px;border-radius:99px;background:#222227;color:var(--mut);border:1px solid transparent;white-space:nowrap}
+.tag.ok{color:var(--acc);border-color:var(--acc)}
+.tag.w{color:var(--warn);border-color:var(--warn)}
+.cpy{display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--line)}
+.cpy:first-child{border-top:0}
+.cpy .l{width:124px;color:var(--mut);font-size:13px;flex:none}
+.cpy .v{flex:1;font-weight:600;min-width:0;overflow-wrap:anywhere}
+.cpy button{min-height:38px;padding:6px 12px}
+.comp{padding:10px 0;border-top:1px solid var(--line)}
+.comp:first-child{border-top:0}
+nav{position:fixed;left:0;right:0;bottom:0;background:#0b0b0dee;backdrop-filter:blur(12px);border-top:1px solid var(--line);display:flex;justify-content:space-around;padding:6px 4px calc(6px + env(safe-area-inset-bottom))}
+nav button{background:none;border:0;border-radius:12px;color:var(--mut);font-size:11.5px;font-weight:500;min-width:56px;min-height:0;padding:8px 4px 4px;flex:1}
+nav button.on{color:var(--acc)}
+.ib{display:inline-flex;align-items:center;justify-content:center;gap:10px}
+nav button svg{display:block;margin:0 auto 3px;width:26px;height:26px;padding:0;box-sizing:content-box;stroke-width:1.8}
+nav button.on svg{background:#dcbb7822;border-radius:99px;padding:4px 14px;margin-top:-4px}
+._fab{position:fixed;right:18px;bottom:88px;width:60px;height:60px;border-radius:50%;font-size:30px;padding:0;background:var(--acc);color:#17120a;border:0;box-shadow:0 6px 20px #0008}
+.imgs{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.imgs div{position:relative;width:84px;height:84px;border-radius:12px;background:#222 center/cover}
+.imgs b{position:absolute;top:-6px;right:-6px;width:24px;height:24px;border-radius:50%;background:var(--bad);color:#fff;display:grid;place-items:center;font-size:14px;cursor:pointer}
+.spin{width:22px;height:22px;border:3px solid #26262b;border-top-color:var(--acc);border-radius:50%;animation:s 1s linear infinite;flex:none}
+@keyframes s{to{transform:rotate(360deg)}}
+.err{color:var(--bad);font-size:14px;margin-top:8px;overflow-wrap:anywhere}
+.chart{display:flex;align-items:flex-end;gap:8px;height:170px;position:relative;margin-top:26px}
+.chart .c{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;cursor:pointer}
+.chart .c i{display:block;width:100%;background:var(--acc);border-radius:6px 6px 0 0;min-height:2px}
+.chart .c i.over{background:var(--warn)}.chart .c i.none{background:#26262b}
+.chart .c em{font-style:normal;font-size:11px;color:var(--mut);margin-bottom:3px}
+.chart .goal{position:absolute;left:0;right:0;border-top:1px dashed var(--mut);font-size:10px;color:var(--mut);text-align:right;pointer-events:none}
+.days{display:flex;gap:8px;margin-top:4px}.days span{flex:1;text-align:center;font-size:12px;color:var(--mut)}
+.mic{display:grid;grid-template-columns:96px 1fr 92px;gap:8px;align-items:center;font-size:13px;padding:5px 0}
+#toast{position:fixed;left:50%;bottom:100px;transform:translateX(-50%);background:#f3f0e9;color:#111;font-weight:500;padding:9px 16px;border-radius:99px;font-size:14px;opacity:0;transition:opacity .2s;pointer-events:none;max-width:90vw;z-index:9}
+#toast.on{opacity:1}
+details summary{cursor:pointer;color:var(--tx);padding:4px 0;font-weight:500;list-style:none;display:flex;justify-content:space-between}
+details summary::-webkit-details-marker{display:none}
+details summary::after{content:'+';color:var(--acc);font-size:20px;line-height:1}
+details[open] summary::after{content:'–'}
+.hero{text-align:center;padding:26px 18px 20px}
+.hero .kc{font:600 68px/1 var(--serif);letter-spacing:-.02em}
+.hero .kc small{font:500 15px "DM Sans",sans-serif;color:var(--mut);margin-left:6px;letter-spacing:0}
+.rings{display:flex;justify-content:space-around;margin-top:22px}
+.ring{position:relative;width:92px;cursor:pointer}
+.ring svg{display:block;width:92px;height:92px;transform:rotate(-90deg)}
+.ring .in{position:absolute;inset:0 0 auto 0;height:92px;display:grid;place-content:center;font:600 22px/1 var(--serif)}
+.ring .in small{display:block;font:500 11px "DM Sans",sans-serif;color:var(--mut);margin-top:3px}
+.ring p{margin:8px 0 0;font-size:12px;color:var(--mut)}
+.split{display:flex;height:6px;border-radius:6px;overflow:hidden;margin-top:20px;gap:2px}
+.split i{display:block;height:100%}
+.hide{display:none}
+</style>
+</head>
+<body>
+<main id="app"></main>
+<nav id="nav"></nav>
+<div id="toast"></div>
+<script>
+"use strict";
+/* ---------- Helfer ---------- */
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const num=v=>{const n=typeof v==='number'?v:parseFloat(String(v??'').replace(',','.'));return isFinite(n)?n:0};
+const r0=n=>Math.round(n), r1=n=>Math.round(n*10)/10;
+const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+const dkey=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+const parseD=k=>{const[a,b,c]=k.split('-').map(Number);return new Date(a,b-1,c)};
+const addD=(k,n)=>{const d=parseD(k);d.setDate(d.getDate()+n);return dkey(d)};
+const monday=k=>{const d=parseD(k);d.setDate(d.getDate()-((d.getDay()+6)%7));return dkey(d)};
+const today=()=>dkey(new Date());
+const fmtD=k=>k===today()?'Heute':k===addD(today(),-1)?'Gestern':parseD(k).toLocaleDateString('de-DE',{weekday:'short',day:'numeric',month:'short'});
+function toast(t){const e=$('#toast');e.textContent=t;e.classList.add('on');clearTimeout(toast.t);toast.t=setTimeout(()=>e.classList.remove('on'),1800)}
+async function cp(t){t=String(t);try{await navigator.clipboard.writeText(t)}catch(e){const a=document.createElement('textarea');a.value=t;document.body.appendChild(a);a.select();try{document.execCommand('copy')}catch(_){}a.remove()}toast('Kopiert: '+(t.length>40?t.slice(0,40)+'…':t))}
+
+const IC=(d,w)=>`<svg viewBox="0 0 24 24" width="${w||24}" height="${w||24}" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+const ICO={cam:'<path d="M4 8h3l1.5-2h7L17 8h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>',img:'<rect x="4" y="5" width="16" height="14" rx="2"/><path d="M4 16l4.5-4.5 4 4 2.5-2.5L20 17"/><circle cx="15" cy="9.5" r="1.2"/>',hist:'<rect x="4" y="5.5" width="16" height="14.5" rx="2.5"/><path d="M8 3.5v4M16 3.5v4M4 10.5h16"/><path d="M8 14.5h.01M12 14.5h.01M16 14.5h.01M8 17.5h.01M12 17.5h.01" stroke-width="2.4"/>',chart:'<path d="M4 4v16h16.5"/><path d="M8.5 16.5v-4M13 16.5v-9M17.5 16.5v-6" stroke-width="2.6"/>',star:'<path d="M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.3-4.1 5.9-.8z"/>',set:'<circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="7.2"/><path d="M19.2 12.0L21.8 12.0M17.1 17.1L18.9 18.9M12.0 19.2L12.0 21.8M6.9 17.1L5.1 18.9M4.8 12.0L2.2 12.0M6.9 6.9L5.1 5.1M12.0 4.8L12.0 2.2M17.1 6.9L18.9 5.1" stroke-width="2.6"/>',plate:'<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/>'};
+/* ---------- Daten ---------- */
+const LS='makrotracker.v1';
+// EU-Referenzmengen (NRV) nach Lebensmittelinformations-Verordnung (EU) Nr. 1169/2011, Anhang XIII
+const MIC=[['vitA_ug','Vitamin A','µg',800],['vitD_ug','Vitamin D','µg',5],['vitE_mg','Vitamin E','mg',12],['vitC_mg','Vitamin C','mg',80],['b1_mg','Vitamin B1','mg',1.1],['b2_mg','Vitamin B2','mg',1.4],['b6_mg','Vitamin B6','mg',1.4],['b12_ug','Vitamin B12','µg',2.5],['folat_ug','Folat','µg',200],['calcium_mg','Calcium','mg',800],['magnesium_mg','Magnesium','mg',375],['eisen_mg','Eisen','mg',14],['zink_mg','Zink','mg',10],['kalium_mg','Kalium','mg',2000]];
+let S={key:'',model:'gemini-3.5-flash',mode:'db',usda:'',models:[],meals:[],favs:[]};
+function load(){try{const j=JSON.parse(localStorage.getItem(LS));if(j){S=Object.assign(S,j);if(/^gemini-2\./.test(S.model))S.model='gemini-3.5-flash'}}catch(e){}}
+function save(){try{localStorage.setItem(LS,JSON.stringify(S))}catch(e){toast('Speichern fehlgeschlagen: '+e.message)}}
+const zero=()=>({kcal:0,kh:0,p:0,f:0,fib:0,sug:0,salt:0});
+function sumMeals(ms){const t=zero();ms.forEach(m=>{for(const k in t)t[k]+=num(m.tot?.[k])});return t}
+
+/* ---------- Gemini ---------- */
+const FORMAT=`AUSGABE: Antworte AUSSCHLIESSLICH mit einem JSON-Objekt, ohne Text davor oder danach, auf Deutsch, nur metrische Einheiten:
+{
+ "beschreibung": "kurze Zusammenfassung der Mahlzeit, max. 1 Satz",
+ "bestandteile": [
+  {"name":"", "menge_g":0, "mengen_hinweis":"woran geschätzt bzw. vom Nutzer angegeben", "pro100g":{"kcal":0,"kh":0,"eiweiss":0,"fett":0}, "kcal":0, "kh":0, "eiweiss":0, "fett":0, "ballaststoffe":0, "zucker":0, "salz":0, "quelle_name":"", "quelle_url":"", "quelle2_name":"", "quelle2_url":"", "unsicherheit":""}
+ ],
+ "mikros": {"vitA_ug":null,"vitD_ug":null,"vitE_mg":null,"vitC_mg":null,"b1_mg":null,"b2_mg":null,"b6_mg":null,"b12_ug":null,"folat_ug":null,"calcium_mg":null,"magnesium_mg":null,"eisen_mg":null,"zink_mg":null,"kalium_mg":null},
+ "pruefung": ["was du in der Selbstkontrolle geprüft und ggf. korrigiert hast"],
+ "anmerkungen": ["kurze Hinweise auf unsichere Schätzungen"],
+ "rueckfrage": null,
+ "vertrauen": "hoch | mittel | niedrig"
+}`;
+const RULES=`GRUNDREGELN
+- Nährwerte dürfen NIEMALS aus dem Gedächtnis stammen. Für JEDEN Bestandteil musst du die Google-Suche benutzen und die Werte pro 100 g aus einem Suchergebnis dieser Anfrage übernehmen. Genauigkeit geht vor Geschwindigkeit, suche lieber einmal mehr.
+- Erfinde keine Quellen und keine Links. quelle_url nur angeben, wenn die Adresse genau so in den Suchergebnissen stand, sonst leer lassen und nur quelle_name nennen.
+- Findest du nichts Belastbares: quelle_name = "keine Quelle gefunden", Werte vorsichtig schätzen, unter unsicherheit klar kennzeichnen und vertrauen = "niedrig" setzen.
+- Angaben des Nutzers (Menge, Zutaten, Zubereitung, Marke) haben immer Vorrang vor dem Bild.
+- Quellen-Rangfolge: 1. Hersteller oder Anbieter (Markenprodukt, Mensa/Studierendenwerk, Restaurantkette), 2. Bundeslebensmittelschlüssel (BLS), USDA FoodData Central, 3. Open Food Facts, Fddb. Keine Foren, keine Blogs.
+- Achte auf den richtigen Zustand: gekocht statt roh (Reis, Nudeln, Kartoffeln, Fleisch), mit oder ohne Haut, Fettstufe, paniert, frittiert.
+
+SELBSTKONTROLLE (vor der Antwort durchführen, Fehler korrigieren, Ergebnis in "pruefung" eintragen)
+- Passt kcal pro 100 g zu den Makros (4 × KH + 4 × Eiweiß + 9 × Fett, Abweichung höchstens 15 %)?
+- Sind die Werte pro 100 g realistisch (KH + Eiweiß + Fett höchstens 100 g, höchstens 900 kcal)?
+- Ist das Gesamtgewicht für eine Portion plausibel?
+- Wurde roh/gekocht verwechselt? Wurde Bratfett, Öl, Butter, Sauce oder Dressing vergessen?
+- Wurden alle Nutzerangaben umgesetzt?`;
+const SYS=`Du bist ein gewissenhafter Nährwert-Analyst. Du bekommst Fotos einer Mahlzeit und/oder eine Beschreibung. Ziel: möglichst genaue, mit Quellen belegte Nährwerte. Jede Anfrage ist eigenständig.
+
+VORGEHEN
+1. Erkennen: Zerlege die Mahlzeit in einzelne Bestandteile. Ausnahme: Markenprodukte, Fertigprodukte und Backwaren mit eigener Nährwertangabe bleiben ein Bestandteil. Denke an Unsichtbares: Bratfett, Öl, Butter, Sahne, Sauce, Dressing, Panade, Zucker. Bei Gebratenem oder Frittiertem setze das aufgenommene Fett als eigenen Bestandteil an.
+2. Mengen: Schätze Gramm im verzehrfertigen Zustand anhand von Referenzen im Bild (Teller, Besteck, Hand, Verpackung, Tablett). Nenne die Referenz in mengen_hinweis und eine Spanne in unsicherheit, z. B. "±20 %".
+3. Recherche: Suche je Bestandteil die Nährwerte pro 100 g. Suche wenn möglich eine zweite Quelle zur Bestätigung (quelle2). Weichen beide um mehr als 15 % ab, nimm die höherrangige und nenne die Abweichung.
+4. Rechnen: Wert = Wert pro 100 g × menge_g / 100.
+5. Mikronährstoffe der gesamten Mahlzeit aus den recherchierten Lebensmitteldaten ableiten. Unbekannt: null, nicht raten.
+6. Zeigt das Bild offensichtlich mehrere Mahlzeiten oder Personen, stelle eine Rückfrage im Feld rueckfrage und schätze trotzdem die wahrscheinlichste Portion.
+
+`+RULES+`
+
+`+FORMAT;
+const SYS_V=`Du bist ein unabhängiger, kritischer Prüfer von Nährwert-Analysen. Du bekommst Fotos und/oder die Beschreibung einer Mahlzeit sowie die Analyse eines anderen Systems als JSON. Vertraue dieser Analyse nicht, sondern prüfe sie.
+
+VORGEHEN
+1. Bestandteile: Fehlt etwas, ist etwas falsch erkannt oder doppelt? Sind die Mengen plausibel?
+2. Gegenrecherche: Suche für JEDEN Bestandteil selbst erneut mit der Google-Suche die Nährwerte pro 100 g, möglichst in einer ANDEREN verlässlichen Quelle als der angegebenen, und trage sie als quelle2 ein. Weicht sie um mehr als 10 % ab, übernimm die Werte der höherrangigen Quelle, setze diese als quelle_name/quelle_url und erkläre die Änderung in "pruefung" mit altem und neuem Wert.
+3. Führe die Selbstkontrolle durch und korrigiere Fehler.
+4. Gib das vollständige, korrigierte Ergebnis zurück. "pruefung" listet, was bestätigt und was geändert wurde. vertrauen = "hoch" nur, wenn zwei Quellen übereinstimmen und die Mengen vom Nutzer stammen oder gut ablesbar sind.
+
+`+RULES+`
+
+`+FORMAT;
+
+const GS=[{google_search:{}}];
+async function gem(contents,sys,tools){
+  if(!S.key)throw new Error('Kein API-Schlüssel hinterlegt. Bitte unter „Einstellungen“ eintragen.');
+  const body={contents,system_instruction:{parts:[{text:sys}]}};
+  if(tools)body.tools=tools;
+  const r=await fetch('https://generativelanguage.googleapis.com/v1beta/models/'+encodeURIComponent(S.model)+':generateContent',{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':S.key},body:JSON.stringify(body)});
+  const j=await r.json().catch(()=>({}));
+  if(!r.ok)throw new Error((j.error&&j.error.message)||('HTTP '+r.status));
+  const c=j.candidates&&j.candidates[0];
+  if(!c)throw new Error('Keine Antwort erhalten'+(j.promptFeedback&&j.promptFeedback.blockReason?' ('+j.promptFeedback.blockReason+')':''));
+  const text=((c.content&&c.content.parts)||[]).filter(p=>p.text&&!p.thought).map(p=>p.text).join('');
+  const gm=c.groundingMetadata||{};
+  const src=(gm.groundingChunks||[]).map(g=>g.web).filter(w=>w&&w.uri).map(w=>({uri:w.uri,title:w.title||w.uri}));
+  const calls=((c.content&&c.content.parts)||[]).filter(p=>p.functionCall).map(p=>p.functionCall);
+  if(!text&&!calls.length)throw new Error('Leere Antwort vom Modell'+(c.finishReason?' ('+c.finishReason+')':''));
+  return{text,src,calls,content:c.content};
+}
+/* ---------- Datenbank-Modus: USDA FoodData Central + Open Food Facts ---------- */
+const FOOD={};let dbErr=[];
+const MICID={vitA_ug:1106,vitD_ug:1114,vitE_mg:1109,vitC_mg:1162,b1_mg:1165,b2_mg:1166,b6_mg:1175,b12_ug:1178,folat_ug:1177,calcium_mg:1087,magnesium_mg:1090,eisen_mg:1089,zink_mg:1095,kalium_mg:1092};
+const FN=[{function_declarations:[{name:'suche_lebensmittel',description:'Sucht ein Lebensmittel in zwei Nährwert-Datenbanken und liefert Kandidaten mit id und Nährwerten pro 100 g. usda_query: englischer Suchbegriff für USDA FoodData Central (generische Lebensmittel, mit Zubereitungszustand). off_query: deutscher Suchbegriff für Open Food Facts (Markenprodukte, Fertigprodukte, Backwaren, typisch deutsche Produkte). Mindestens einen der beiden Suchbegriffe angeben.',parameters:{type:'object',properties:{name:{type:'string',description:'Bestandteil der Mahlzeit, für den gesucht wird'},usda_query:{type:'string',description:'z. B. "rice white cooked" oder "chicken breast roasted"'},off_query:{type:'string',description:'z. B. "Apfeltasche Blätterteig"'}},required:['name']}}]}];
+async function usda(q){
+  const r=await fetch('https://api.nal.usda.gov/fdc/v1/foods/search?api_key='+encodeURIComponent(S.usda||'DEMO_KEY')+'&query='+encodeURIComponent(q)+'&dataType='+encodeURIComponent('SR Legacy,Foundation')+'&pageSize=6');
+  if(!r.ok)throw new Error(r.status===429?'Abfrage-Limit erreicht. Trage in den Einstellungen einen eigenen kostenlosen USDA-Schlüssel ein.':'HTTP '+r.status);
+  const j=await r.json();
+  return(j.foods||[]).map(f=>{const n={};(f.foodNutrients||[]).forEach(x=>{n[x.nutrientId]=x.value});
+    const kh=num(n[1005]),p=num(n[1003]),ft=num(n[1004]),kcal=num(n[1008]??n[2047]??n[2048]??(4*kh+4*p+9*ft));
+    const mic={};for(const k in MICID)mic[k]=n[MICID[k]]??null;
+    const id='usda:'+f.fdcId;
+    FOOD[id]={name:f.description,src:'USDA FoodData Central',url:'https://fdc.nal.usda.gov/food-details/'+f.fdcId+'/nutrients',kcal,kh,p,f:ft,fib:num(n[1079]),sug:num(n[2000]??n[1063]),salt:num(n[1093])*2.5/1000,mic};
+    return{id,name:f.description,kcal:r0(kcal),kh:r1(kh),eiweiss:r1(p),fett:r1(ft)}});
+}
+async function off(q){
+  const r=await fetch('https://world.openfoodfacts.org/cgi/search.pl?search_terms='+encodeURIComponent(q)+'&search_simple=1&action=process&json=1&page_size=10&fields=code,product_name,brands,nutriments');
+  if(!r.ok)throw new Error(r.status===429?'Abfrage-Limit erreicht, bitte eine Minute warten.':'HTTP '+r.status);
+  const j=await r.json();
+  return(j.products||[]).filter(x=>x.product_name&&x.nutriments&&x.nutriments['energy-kcal_100g']!=null).slice(0,5).map(x=>{const n=x.nutriments,id='off:'+x.code,name=x.product_name+(x.brands?' ('+x.brands+')':'');
+    FOOD[id]={name,src:'Open Food Facts',url:'https://world.openfoodfacts.org/product/'+x.code,kcal:num(n['energy-kcal_100g']),kh:num(n.carbohydrates_100g),p:num(n.proteins_100g),f:num(n.fat_100g),fib:num(n.fiber_100g),sug:num(n.sugars_100g),salt:num(n.salt_100g),mic:null};
+    const f=FOOD[id];return{id,name,kcal:r0(f.kcal),kh:r1(f.kh),eiweiss:r1(f.p),fett:r1(f.f)}});
+}
+async function lookup(a){a=a||{};const out={usda:[],off:[]},jobs=[];
+  if(a.usda_query)jobs.push(usda(a.usda_query).then(r=>{out.usda=r}).catch(e=>{out.usda_fehler=e.message;dbErr.push('USDA: '+e.message)}));
+  if(a.off_query)jobs.push(off(a.off_query).then(r=>{out.off=r}).catch(e=>{out.off_fehler=e.message;dbErr.push('Open Food Facts: '+e.message)}));
+  await Promise.all(jobs);return out}
+async function dbLoop(hist,onStep){
+  for(let i=0;i<8;i++){
+    const o=await gemR(hist,SYS_DB,FN);hist.push(o.content);
+    if(!o.calls.length)return o;
+    onStep(o.calls.map(c=>c.args&&c.args.name).filter(Boolean));
+    const res=await Promise.all(o.calls.map(c=>lookup(c.args)));
+    hist.push({role:'user',parts:o.calls.map((c,k)=>({functionResponse:Object.assign({name:c.name,response:res[k]},c.id?{id:c.id}:{})}))});
+  }
+  throw new Error('Zu viele Suchschritte ohne Ergebnis.');
+}
+function normDB(j){
+  const used=[],seen=new Set();let micAny=false,micPart=false,miss=0;const mik={};
+  const best=(Array.isArray(j.bestandteile)?j.bestandteile:[]).map(c=>{const g=num(c.menge_g),f=FOOD[c.quelle_id];
+    if(f){if(!seen.has(f.url)){seen.add(f.url);used.push({uri:f.url,title:f.src+': '+f.name})}
+      if(f.mic){micAny=true;for(const k in f.mic)if(f.mic[k]!=null)mik[k]=(mik[k]||0)+f.mic[k]*g/100}else micPart=true;
+      return{name:c.name,menge_g:g,mengen_hinweis:(c.mengen_hinweis?c.mengen_hinweis+' · ':'')+'Datenbankeintrag: „'+f.name+'“',pro100g:{kcal:f.kcal,kh:f.kh,eiweiss:f.p,fett:f.f},ballaststoffe:f.fib*g/100,zucker:f.sug*g/100,salz:f.salt*g/100,quelle_name:f.src,quelle_url:f.url,unsicherheit:c.unsicherheit}}
+    micPart=true;miss++;const e=c.schaetzung_pro100g||{};
+    return{name:c.name,menge_g:g,mengen_hinweis:c.mengen_hinweis,pro100g:{kcal:num(e.kcal),kh:num(e.kh),eiweiss:num(e.eiweiss),fett:num(e.fett)},quelle_name:'keine Quelle (Schätzung der KI)',unsicherheit:c.unsicherheit,_miss:1}});
+  const r=norm(Object.assign({},j,{bestandteile:best,mikros:micAny?mik:{}}));
+  r.comps.forEach((c,i)=>{if(best[i]._miss)c.warn='Kein Datenbankeintrag gefunden. Diese Werte sind eine Schätzung der KI ohne Quelle.'});
+  if(micAny&&micPart)r.notes.push('Mikronährstoffe sind unvollständig: Sie stammen nur aus den USDA-Einträgen.');
+  if(dbErr.length)r.notes.push('Datenbank-Fehler während der Suche: '+[...new Set(dbErr)].join(' | '));
+  if(miss)r.conf='niedrig';
+  r.used=used;return r}
+const SYS_DB=`Du bist ein gewissenhafter Nährwert-Analyst. Du bekommst Fotos einer Mahlzeit und/oder eine Beschreibung. Jede Anfrage ist eigenständig.
+
+WICHTIG: Du nennst KEINE Nährwerte aus dem Gedächtnis. Alle Nährwerte kommen aus der Funktion suche_lebensmittel, und die App rechnet selbst. Deine Aufgabe ist: Bestandteile erkennen, Mengen schätzen und den passenden Datenbankeintrag auswählen.
+
+VORGEHEN
+1. Erkennen: Zerlege die Mahlzeit in einzelne Bestandteile. Ausnahme: Markenprodukte, Fertigprodukte und Backwaren bleiben ein Bestandteil. Denke an Unsichtbares: Bratfett, Öl, Butter, Sahne, Sauce, Dressing, Panade, Zucker. Bei Gebratenem oder Frittiertem setze das aufgenommene Fett als eigenen Bestandteil an.
+2. Mengen: Schätze Gramm im verzehrfertigen Zustand anhand von Referenzen im Bild (Teller, Besteck, Hand, Verpackung, Tablett). Nenne die Referenz in mengen_hinweis und eine Spanne in unsicherheit, z. B. "±20 %". Angaben des Nutzers haben immer Vorrang vor dem Bild.
+3. Suchen: Rufe für JEDEN Bestandteil suche_lebensmittel auf, alle Aufrufe möglichst gleichzeitig. Generische Lebensmittel: usda_query auf Englisch mit Zustand ("rice white cooked", "chicken breast roasted", "butter salted"). Markenprodukte, Fertiggerichte, Backwaren und typisch deutsche Produkte: off_query auf Deutsch, gern zusätzlich usda_query. Passt kein Kandidat, suche einmal mit anderen Begriffen erneut.
+4. Auswählen: Nimm je Bestandteil den Kandidaten, der Lebensmittel UND Zustand am besten trifft (gekocht statt roh, mit oder ohne Haut, Fettstufe). Prüfe die Kandidatenwerte auf Plausibilität (kcal ungefähr 4 × KH + 4 × Eiweiß + 9 × Fett). Einträge aus Open Food Facts sind teils fehlerhaft: Wirkt einer unplausibel, nimm einen anderen. Gibt es mehrere gleich gute, nimm einen mit mittleren Werten.
+5. Kein passender Eintrag: quelle_id = null setzen, schaetzung_pro100g angeben und in unsicherheit begründen. Niemals eine quelle_id erfinden, nur ids aus den Suchergebnissen verwenden.
+6. Selbstkontrolle: Ist das Gesamtgewicht für eine Portion plausibel? Fett oder Sauce vergessen? Roh und gekocht verwechselt? Alle Nutzerangaben umgesetzt? Ergebnis kurz in "pruefung" eintragen.
+7. Zeigt das Bild offensichtlich mehrere Mahlzeiten oder Personen, stelle eine Rückfrage im Feld rueckfrage und schätze trotzdem die wahrscheinlichste Portion.
+
+AUSGABE: Erst wenn alle Suchen abgeschlossen sind, antworte AUSSCHLIESSLICH mit einem JSON-Objekt, ohne Text davor oder danach, auf Deutsch:
+{
+ "beschreibung": "kurze Zusammenfassung der Mahlzeit, max. 1 Satz",
+ "bestandteile": [
+  {"name":"", "menge_g":0, "mengen_hinweis":"woran geschätzt bzw. vom Nutzer angegeben", "quelle_id":"usda:12345", "schaetzung_pro100g":null, "unsicherheit":""}
+ ],
+ "pruefung": ["was du geprüft und ggf. korrigiert hast"],
+ "anmerkungen": ["kurze Hinweise auf unsichere Schätzungen"],
+ "rueckfrage": null,
+ "vertrauen": "hoch | mittel | niedrig"
+}
+schaetzung_pro100g hat bei Bedarf die Form {"kcal":0,"kh":0,"eiweiss":0,"fett":0}.`;
+
+function visible(){return new Promise(ok=>{if(document.visibilityState==='visible')return setTimeout(ok,1500);const f=()=>{if(document.visibilityState==='visible'){document.removeEventListener('visibilitychange',f);setTimeout(ok,800)}};document.addEventListener('visibilitychange',f)})}
+async function gemR(c,sy,se){try{return await gem(c,sy,se)}catch(e){if(e instanceof TypeError){await visible();return await gem(c,sy,se)}throw e}}  // Netzabbruch (z. B. App im Hintergrund): einmal wiederholen
+let wl=null;async function lock(){try{wl=await navigator.wakeLock.request('screen')}catch(e){}}function unlock(){try{wl&&wl.release()}catch(e){}wl=null}
+let swReg=null;if('serviceWorker' in navigator&&location.protocol==='https:')navigator.serviceWorker.register('sw.js').then(r=>{swReg=r}).catch(()=>{});
+const canNotify=()=>!!swReg&&'Notification' in window&&Notification.permission==='granted';
+function askNotify(){try{if(swReg&&'Notification' in window&&Notification.permission==='default')Notification.requestPermission().then(()=>render())}catch(e){}}
+function notify(t,b){try{if(canNotify()&&document.visibilityState!=='visible')swReg.showNotification(t,{body:b,icon:'icon-192.png',badge:'icon-192.png',tag:'makro'})}catch(e){}}
+function parseJSON(t){
+  let s=String(t).replace(/```(?:json)?/gi,'');
+  const a=s.indexOf('{'),b=s.lastIndexOf('}');
+  if(a<0||b<=a)throw new Error('Antwort enthielt kein JSON: '+String(t).slice(0,200));
+  try{return JSON.parse(s.slice(a,b+1))}catch(e){throw new Error('JSON nicht lesbar: '+e.message)}
+}
+function norm(j){
+  const comps=(Array.isArray(j.bestandteile)?j.bestandteile:[]).map(c=>({name:String(c.name||'?'),g:num(c.menge_g),hint:String(c.mengen_hinweis||''),p100:c.pro100g?{kcal:num(c.pro100g.kcal),kh:num(c.pro100g.kh),p:num(c.pro100g.eiweiss),f:num(c.pro100g.fett)}:null,kcal:num(c.kcal),kh:num(c.kh),p:num(c.eiweiss),f:num(c.fett),fib:num(c.ballaststoffe),sug:num(c.zucker),salt:num(c.salz),sn:String(c.quelle_name||''),su:/^https?:\/\//i.test(c.quelle_url||'')?String(c.quelle_url):'',s2n:String(c.quelle2_name||''),s2u:/^https?:\/\//i.test(c.quelle2_url||'')?String(c.quelle2_url):'',unc:String(c.unsicherheit||''),warn:''}));
+  comps.forEach(c=>{if(c.p100&&c.g>0&&c.p100.kcal>0){for(const k of['kcal','kh','p','f'])c[k]=c.p100[k]*c.g/100}   // Rechnung im Code statt im Modell
+    const at=4*c.kh+4*c.p+9*c.f;if(c.kcal>30&&Math.abs(at-c.kcal)/c.kcal>.2)c.warn='Plausibilität: kcal passen nicht zu den Makros (rechnerisch etwa '+r0(at)+' kcal). Bitte Quelle prüfen.';
+    if(c.p100&&(c.p100.kcal>900||c.p100.kh+c.p100.p+c.p100.f>101))c.warn='Plausibilität: Werte pro 100 g sind unrealistisch. Bitte Quelle prüfen.'});
+  if(!comps.length)throw new Error('Es wurden keine Bestandteile erkannt.');
+  const tot=zero();comps.forEach(c=>{for(const k in tot)tot[k]+=c[k]});   // Summe selbst rechnen, nicht dem Modell überlassen
+  const micros={};MIC.forEach(([k])=>{const v=j.mikros&&j.mikros[k];micros[k]=(v===null||v===undefined||v==='')?null:num(v)});
+  return{desc:String(j.beschreibung||'Mahlzeit'),comps,tot,micros,check:(Array.isArray(j.pruefung)?j.pruefung:[j.pruefung]).filter(Boolean).map(String),notes:(Array.isArray(j.anmerkungen)?j.anmerkungen:[j.anmerkungen]).filter(Boolean).map(String),ask:j.rueckfrage?String(j.rueckfrage):'',conf:String(j.vertrauen||'')};
+}
+
+/* ---------- Bilder ---------- */
+function scale(img,max,q){const k=Math.min(1,max/Math.max(img.width,img.height));const c=document.createElement('canvas');c.width=Math.round(img.width*k);c.height=Math.round(img.height*k);c.getContext('2d').drawImage(img,0,0,c.width,c.height);return c.toDataURL('image/jpeg',q)}
+function readImg(file){return new Promise((ok,no)=>{const u=URL.createObjectURL(file);const i=new Image();i.onload=()=>{try{const big=scale(i,1280,.82),th=scale(i,240,.6);URL.revokeObjectURL(u);ok({mime:'image/jpeg',data:big.split(',')[1],url:big,thumb:th})}catch(e){no(e)}};i.onerror=()=>no(new Error('Bild konnte nicht gelesen werden'));i.src=u})}
+
+/* ---------- Zustand der Oberfläche ---------- */
+let view='neu',weekOf=monday(today()),draft=null,detail=null;
+function newDraft(){draft={imgs:[],text:'',res:null,src:[],hist:[],busy:false,err:'',corr:''}}
+
+/* ---------- Bausteine ---------- */
+function bar(v,g){const p=g>0?Math.min(100,v/g*100):0;return `<div class="bar"><i class="${g>0&&v>g*1.05?'over':''}" style="width:${p}%"></i></div>`}
+function macroGrid(t){return `<div class="grid4" style="text-align:center;margin-top:10px">${[['kcal',r0(t.kcal)],['Kohlenhydr.',r0(t.kh)+' g'],['Eiweiß',r0(t.p)+' g'],['Fett',r0(t.f)+' g']].map(x=>`<div><b class="num" style="font-size:20px">${x[1]}</b><br><span class="sm mut">${x[0]}</span></div>`).join('')}</div>`}
+function mealRow(m){return `<div class="meal" onclick="A.open('${m.id}')"><div class="th" style="${m.thumb?`background-image:url(${m.thumb})`:''}">${m.thumb?'':IC(ICO.plate)}</div>
+ <div class="grow"><div class="ell">${esc(m.desc)}</div><div class="sm mut num">${r0(m.tot.kcal)} kcal · K ${r0(m.tot.kh)} · E ${r0(m.tot.p)} · F ${r0(m.tot.f)}</div></div>
+ ${m.done?'<span class="tag ok">in Yazio</span>':'<span class="tag w">offen</span>'}</div>`}
+function ring(g,share,col,name){const R=40,C=2*Math.PI*R;return `<div class="ring" onclick="cp('${r0(g)}')"><svg viewBox="0 0 92 92"><circle cx="46" cy="46" r="${R}" fill="none" stroke="#26262b" stroke-width="7"/><circle cx="46" cy="46" r="${R}" fill="none" stroke="${col}" stroke-width="7" stroke-linecap="round" stroke-dasharray="${Math.max(.01,share)*C} ${C}"/></svg><div class="in num">${r0(g)}<small>g</small></div><p>${name} · ${r0(share*100)} %</p></div>`}
+function hero(m){const t=m.tot,a=4*t.kh,b=4*t.p,c=9*t.f,s=(a+b+c)||1;
+ return `<div class="card hero"><div class="kc num" onclick="cp('${r0(t.kcal)}')">${r0(t.kcal)}<small>kcal</small></div>
+ <div class="rings">${ring(t.kh,a/s,'var(--kh)','Kohlenhydr.')}${ring(t.p,b/s,'var(--pr)','Eiweiß')}${ring(t.f,c/s,'var(--ft)','Fett')}</div>
+ <div class="split"><i style="width:${a/s*100}%;background:var(--kh)"></i><i style="width:${b/s*100}%;background:var(--pr)"></i><i style="width:${c/s*100}%;background:var(--ft)"></i></div>
+ <div class="sm mut" style="margin-top:10px">Anteil an den Kalorien. Zahl antippen zum Kopieren.</div></div>`}
+function copyBlock(m){const rows=[['Beschreibung',m.desc,m.desc],['Brennwert (kcal)',r0(m.tot.kcal),r0(m.tot.kcal)],['Kohlenhydrate (g)',r0(m.tot.kh),r0(m.tot.kh)],['Eiweiß (g)',r0(m.tot.p),r0(m.tot.p)],['Fett (g)',r0(m.tot.f),r0(m.tot.f)]];
+ return `<div class="card"><h3 style="margin-top:0">Für Yazio „Schnell hinzufügen“</h3>${rows.map(r=>`<div class="cpy"><span class="l">${r[0]}</span><span class="v num">${esc(r[1])}</span><button onclick="cp(this.dataset.v)" data-v="${esc(r[2])}" aria-label="Kopieren">⧉</button></div>`).join('')}</div>`}
+function resultHTML(m,src){
+ const micros=MIC.filter(([k])=>m.micros&&m.micros[k]!=null);
+ return hero(m)+copyBlock(m)+
+ `<div class="card"><div class="row sp"><h3 style="margin:0">Bestandteile</h3>${m.conf?`<span class="tag ${/hoch/i.test(m.conf)?'ok':'w'}">Vertrauen: ${esc(m.conf)}</span>`:''}</div>${m.comps.map(c=>`<div class="comp"><div class="row sp"><b>${esc(c.name)}</b><span class="num">${r0(c.g)} g</span></div>
+   <div class="sm num">${r0(c.kcal)} kcal · K ${r1(c.kh)} g · E ${r1(c.p)} g · F ${r1(c.f)} g</div>
+   ${c.p100?`<div class="sm mut num">pro 100 g: ${r0(c.p100.kcal)} kcal · K ${r1(c.p100.kh)} · E ${r1(c.p100.p)} · F ${r1(c.p100.f)}</div>`:''}
+   ${c.hint?`<div class="sm mut">${esc(c.hint)}</div>`:''}${c.unc?`<div class="sm" style="color:var(--warn)">${esc(c.unc)}</div>`:''}
+   ${c.warn?`<div class="sm" style="color:var(--bad)">${esc(c.warn)}</div>`:''}
+   <div class="sm">Quelle: ${c.su?`<a href="${esc(c.su)}" target="_blank" rel="noopener">${esc(c.sn||c.su)}</a>`:esc(c.sn||'nicht angegeben')}${c.s2n||c.s2u?` · Gegenprüfung: ${c.s2u?`<a href="${esc(c.s2u)}" target="_blank" rel="noopener">${esc(c.s2n||c.s2u)}</a>`:esc(c.s2n)}`:''}</div></div>`).join('')}</div>
+ ${(m.notes&&m.notes.length)||m.ask?`<div class="card"><h3 style="margin-top:0">Anmerkungen</h3>${m.ask?`<p style="color:var(--warn);margin:4px 0">Rückfrage: ${esc(m.ask)}</p>`:''}<ul class="sm" style="margin:4px 0;padding-left:18px">${(m.notes||[]).map(n=>`<li>${esc(n)}</li>`).join('')}</ul></div>`:''}
+ ${m.check&&m.check.length?`<div class="card"><details><summary>Selbstprüfung der KI (${m.check.length})</summary><ul class="sm" style="margin:4px 0;padding-left:18px">${m.check.map(n=>`<li>${esc(n)}</li>`).join('')}</ul></details></div>`:''}
+ <div class="card"><details><summary>Mikronährstoffe und weitere Werte anzeigen</summary>
+  <div class="grid4 sm" style="margin:10px 0;text-align:center"><div><b class="num">${r1(m.tot.fib)} g</b><br><span class="mut">Ballastst.</span></div><div><b class="num">${r1(m.tot.sug)} g</b><br><span class="mut">Zucker</span></div><div><b class="num">${r1(m.tot.salt)} g</b><br><span class="mut">Salz</span></div><div><b class="num">${r0(m.comps.reduce((a,c)=>a+c.g,0))} g</b><br><span class="mut">Gewicht</span></div></div>
+  ${micros.length?micros.map(([k,n,u,ref])=>`<div class="mic"><span>${n}</span>${bar(m.micros[k],ref)}<span class="num mut" style="text-align:right">${r1(m.micros[k])} ${u} · ${r0(m.micros[k]/ref*100)} %</span></div>`).join('')+'<div class="sm mut">Geschätzt. % der EU-Referenzmenge pro Tag (Verordnung (EU) Nr. 1169/2011)</div>':'<div class="sm mut">Keine Mikronährstoffe ermittelt.</div>'}</details></div>
+ <div class="card"><details><summary>Quellen (${src?src.length:0})</summary>${src&&src.length?`<ul class="sm" style="margin:4px 0;padding-left:18px">${src.map(s=>`<li><a href="${esc(s.uri)}" target="_blank" rel="noopener">${esc(s.title)}</a></li>`).join('')}</ul>`:''}</details>${src&&src.length?'':'<div class="sm" style="color:var(--warn)">Für diese Antwort liegt keine Quelle vor. Die Werte könnten aus dem Modellwissen stammen.</div>'}</div>`}
+
+/* ---------- Ansichten ---------- */
+function vTag(){const ds=[...new Set(S.meals.map(m=>m.date))].sort().reverse();
+ let h='<h1>Verlauf</h1>';
+ if(!ds.length)return h+'<div class="card mut" style="text-align:center">Noch nichts gespeichert.</div>';
+ ds.forEach(k=>{const l=S.meals.filter(m=>m.date===k).sort((a,b)=>b.ts-a.ts),t=sumMeals(l);h+=`<div class="card"><div class="row sp"><b>${fmtD(k)}</b><span class="mut sm num">${r0(t.kcal)} kcal · K ${r0(t.kh)} · E ${r0(t.p)} · F ${r0(t.f)}</span></div>${l.map(mealRow).join('')}</div>`});
+ return h}
+
+function vNeu(){const d=draft;
+ let h=`<h1>Foto-Makros</h1>
+ <div class="card"><label class="btn full" style="text-align:center;font-size:18px;font-weight:700;margin:0 0 10px;padding:18px;background:var(--acc);color:#17120a;border-color:var(--acc)"><span class="ib">${IC(ICO.cam,22)} Foto aufnehmen</span><input type="file" accept="image/*" capture="environment" class="hide" onchange="A.img(this)"></label>
+ <div><label class="btn full" style="text-align:center;color:var(--tx);font-size:16px;margin:0"><span class="ib">${IC(ICO.img,20)} Aus Galerie</span><input type="file" accept="image/*" multiple class="hide" onchange="A.img(this)"></label></div>
+ ${d.imgs.length?`<div class="imgs">${d.imgs.map((i,n)=>`<div style="background-image:url(${i.url})"><b onclick="A.rmImg(${n})">×</b></div>`).join('')}</div>`:''}
+ <label>Zusatzinfos (Zutaten, Gramm, Zubereitung, Marke, Mensa …)</label><textarea placeholder="z. B. Mensa, ca. 250 g Reis, Hähnchen in Butter gebraten" oninput="draft.text=this.value">${esc(d.text)}</textarea>
+ <button class="pri full" style="margin-top:14px" onclick="A.analyze()" ${d.busy?'disabled':''}>${d.res?'Neu analysieren':'Analysieren'}</button>
+ ${d.busy?`<div class="row" style="margin-top:12px"><div class="spin"></div><span class="sm mut">${esc(d.stage||'')} Das kann bis zu einer Minute dauern. ${canNotify()?'Du kannst kurz in eine andere App wechseln und bekommst eine Benachrichtigung, sobald das Ergebnis da ist.':'Lass die App dabei am besten geöffnet.'}</span></div>`:''}
+ ${d.err?`<div class="err">${esc(d.err)}</div>`:''}</div>`;
+ if(d.res){h+=`<h2>${esc(d.res.desc)}</h2>`+resultHTML(d.res,d.src)+
+ `<div class="card"><h3 style="margin-top:0">Nachkorrigieren</h3><textarea style="min-height:64px" placeholder="z. B. Es war mehr Reis, etwa 300 g. Keine Sauce." oninput="draft.corr=this.value">${esc(d.corr)}</textarea>
+  <button class="full" style="margin-top:10px" onclick="A.correct()" ${d.busy?'disabled':''}>Mit Korrektur neu berechnen</button></div>
+  <div class="sm mut" style="margin:8px 2px">Automatisch im Verlauf gespeichert.</div><div class="row"><button class="pri grow" onclick="A.fresh()">Neue Mahlzeit</button><button onclick="A.favDraft()">★ Favorit</button></div>`}
+ return h}
+
+function vDetail(){const m=S.meals.find(x=>x.id===detail);if(!m){view='tag';return vTag()}
+ return `<div class="row sp"><button class="ghost" onclick="A.go('tag')">‹ Zurück</button><span class="mut sm">${fmtD(m.date)}</span></div><h1>${esc(m.desc)}</h1>
+ <div class="card row sp"><span>In Yazio übertragen</span><button class="${m.done?'pri':''}" onclick="A.done()">${m.done?'✓ Erledigt':'Als erledigt markieren'}</button></div>`+
+ resultHTML(m,m.src)+`<div class="row"><button class="grow" onclick="A.fav()">★ Als Favorit speichern</button><button class="dng" onclick="A.del()">Löschen</button></div>`}
+
+function vWoche(){
+ const ks=[...Array(7)].map((_,i)=>addD(weekOf,i)),ds=ks.map(k=>{const ms=S.meals.filter(m=>m.date===k);return{t:sumMeals(ms),has:ms.length>0}});
+ const mx=Math.max(...ds.map(d=>d.t.kcal),1),act=ds.filter(d=>d.has),n=act.length||1;
+ const avg=k=>act.reduce((a,d)=>a+d.t[k],0)/n;
+ const end=parseD(ks[6]),st=parseD(ks[0]);
+ const ms=S.meals.filter(m=>m.date>=ks[0]&&m.date<=ks[6]),tm=sumMeals(ms),cnt=ms.length||1;
+ let h=`<div class="row sp"><button class="ghost" onclick="A.week(-1)">‹</button><h1 style="margin:0;font-size:18px">${st.toLocaleDateString('de-DE',{day:'numeric',month:'short'})} – ${end.toLocaleDateString('de-DE',{day:'numeric',month:'short'})}</h1><button class="ghost" onclick="A.week(1)" ${weekOf>=monday(today())?'disabled':''}>›</button></div>
+ <div class="card"><h3 style="margin-top:0">Kalorien aus Foto-Mahlzeiten pro Tag</h3><div class="chart">
+ ${ds.map(d=>`<div class="c" onclick="A.go('tag')"><em class="num">${d.has?r0(d.t.kcal):''}</em><i class="${d.has?'':'none'}" style="height:${d.t.kcal/mx*100}%"></i></div>`).join('')}</div>
+ <div class="days">${['Mo','Di','Mi','Do','Fr','Sa','So'].map((x,i)=>`<span style="${ks[i]===today()?'color:var(--acc);font-weight:700':''}">${x}</span>`).join('')}</div></div>
+ <div class="card"><h3 style="margin-top:0">Diese Woche: ${ms.length} Foto-Mahlzeiten an ${act.length} Tagen</h3><div class="sm mut">Summe</div>${macroGrid(tm)}<div class="sm mut" style="margin-top:12px">Durchschnitt pro Mahlzeit</div>${macroGrid({kcal:tm.kcal/cnt,kh:tm.kh/cnt,p:tm.p/cnt,f:tm.f/cnt})}
+ <div class="sm mut" style="margin-top:12px">Ø pro Mahlzeit: Ballaststoffe <b class="num">${r1(tm.fib/cnt)} g</b> · Zucker <b class="num">${r1(tm.sug/cnt)} g</b> · Salz <b class="num">${r1(tm.salt/cnt)} g</b></div></div>`;
+ const mic=MIC.map(([k,nm,u,ref])=>({nm,u,ref,v:ms.reduce((a,m)=>a+num(m.micros&&m.micros[k]),0)})).filter(x=>x.v>0);
+ if(mic.length)h+=`<div class="card"><details><summary>Mikronährstoffe der Woche (Summe)</summary>${mic.map(x=>`<div class="mic"><span>${x.nm}</span>${bar(x.v,x.ref*7)}<span class="num mut" style="text-align:right">${r1(x.v)} ${x.u}</span></div>`).join('')}<div class="sm mut">Geschätzt, nur aus Foto-Mahlzeiten. Balken: Anteil an 7 EU-Tagesreferenzmengen.</div></details></div>`;
+ return h+`<div class="sm mut">Die Statistik enthält nur, was du hier fotografiert hast, nicht deine übrigen Yazio-Einträge.</div>`}
+
+function vFav(){let h='<h1>Favoriten</h1>';
+ if(!S.favs.length)return h+'<div class="card mut" style="text-align:center">Noch keine Favoriten. Speichere wiederkehrende Gerichte nach der Analyse mit ★, um sie später mit einem Tipp einzutragen.</div>';
+ return h+`<div class="sm mut">Gespeicherte Gerichte ohne neue Analyse wieder abrufen.</div>`+S.favs.map(f=>`<div class="card"><div class="row"><div class="th" style="${f.thumb?`background-image:url(${f.thumb})`:''}">${f.thumb?'':IC(ICO.star)}</div><div class="grow"><div class="ell">${esc(f.desc)}</div><div class="sm mut num">${r0(f.tot.kcal)} kcal · K ${r0(f.tot.kh)} · E ${r0(f.tot.p)} · F ${r0(f.tot.f)}</div></div></div>
+ <div class="row" style="margin-top:10px"><button class="pri grow" onclick="A.favAdd('${f.id}')">Abrufen</button><button class="dng" onclick="A.favDel('${f.id}')">Entfernen</button></div></div>`).join('')}
+
+function vSet(){
+ return `<h1>Einstellungen</h1><div class="card"><h3 style="margin-top:0">Gemini-API</h3>
+ <label>API-Schlüssel (<a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">in Google AI Studio erstellen</a>)</label><input id="s_key" type="password" value="${esc(S.key)}" placeholder="AIza…" autocomplete="off">
+ <label>Modell</label>${S.models.length?`<select id="s_model">${[...new Set([S.model,...S.models])].map(m=>`<option ${m===S.model?'selected':''}>${esc(m)}</option>`).join('')}</select>`:`<input id="s_model" value="${esc(S.model)}">`}
+ <div class="row" style="margin-top:10px"><button class="pri grow" onclick="A.setSave()">Speichern</button><button onclick="A.models()">Modelle laden</button></div>
+ <label>Woher kommen die Nährwerte?</label><select id="s_mode"><option value="db" ${S.mode!=='google'?'selected':''}>Nährwert-Datenbanken (kostenlos)</option><option value="google" ${S.mode==='google'?'selected':''}>Google-Suche (bezahlter Gemini-Tarif nötig)</option></select>
+ <label>USDA-Schlüssel (optional, <a href="https://fdc.nal.usda.gov/api-key-signup" target="_blank" rel="noopener">kostenlos anfordern</a>)</label><input id="s_usda" value="${esc(S.usda)}" placeholder="leer = Test-Schlüssel mit kleinem Limit" autocomplete="off">
+ <div class="row" style="margin-top:10px"><button class="grow" onclick="A.setSave()">Speichern</button></div>
+ <div class="sm mut" style="margin-top:8px">Der Schlüssel bleibt nur in diesem Browser gespeichert und wird ausschließlich an die Google-Schnittstelle gesendet.</div></div>
+ <div class="card"><h3 style="margin-top:0">Datensicherung</h3><p class="sm mut">Alle Daten liegen nur in diesem Browser. Sichere sie regelmäßig als Datei.</p>
+ <div class="row"><button class="grow" onclick="A.exp()">Exportieren</button><label class="btn grow" style="text-align:center;color:var(--tx);font-size:16px;margin:0">Importieren<input type="file" accept="application/json,.json" class="hide" onchange="A.imp(this)"></label></div></div>`}
+
+function render(){
+ const v={tag:vTag,neu:vNeu,detail:vDetail,woche:vWoche,fav:vFav,set:vSet}[view]||vTag;
+ $('#app').innerHTML=v();
+ const tab=view==='detail'?'tag':view;
+ $('#nav').innerHTML=[['neu','cam','Foto'],['tag','hist','Verlauf'],['woche','chart','Statistik'],['fav','star','Favoriten'],['set','set','Einstellungen']].map(([k,i,l])=>`<button class="${tab===k?'on':''}" onclick="A.go('${k}')">${IC(ICO[i])}${l}</button>`).join('');
+}
+
+/* ---------- Aktionen ---------- */
+const A={
+ go(v){if(v==='neu'&&!draft)newDraft();view=v;render();scrollTo(0,0)},
+ week(n){const k=addD(weekOf,7*n);if(k<=monday(today())){weekOf=k;render()}},
+ open(id){detail=id;A.go('detail')},
+ async img(inp){for(const f of inp.files){try{draft.imgs.push(await readImg(f))}catch(e){toast(e.message)}}inp.value='';render()},
+ rmImg(n){draft.imgs.splice(n,1);render()},
+ async run(corr){const d=draft;
+  if(!corr&&!d.imgs.length&&!d.text.trim()){d.err='Bitte ein Foto aufnehmen oder die Mahlzeit beschreiben.';return render()}
+  const db=S.mode!=='google';askNotify();
+  d.busy=true;d.err='';d.stage=db?'Erkenne Bestandteile.':'Schritt 1 von 2: Bestandteile erkennen und Nährwerte online recherchieren.';render();lock();
+  const len=d.hist.length;
+  const addSrc=o=>{const seen=new Set(d.src.map(s=>s.uri));o.src.forEach(s=>{if(!seen.has(s.uri)){seen.add(s.uri);d.src.push(s)}})};
+  try{
+   const imgs=d.imgs.map(i=>({inline_data:{mime_type:i.mime,data:i.data}}));
+   const info=(d.imgs.length?'Foto(s) meiner Mahlzeit. ':'Kein Foto vorhanden, nur Beschreibung. ')+(d.text.trim()?'Zusatzinfos von mir (haben Vorrang): '+d.text.trim():'Keine Zusatzinfos.');
+   if(!corr){d.src=[];d.hist=[{role:'user',parts:[...imgs,{text:info}]}]}
+   else d.hist.push({role:'user',parts:[{text:'Korrektur von mir (hat Vorrang): '+corr+'\nSuche erneut, wo nötig, führe die Selbstkontrolle durch und antworte wieder ausschließlich mit dem vollständigen JSON-Objekt.'}]});
+   let res;
+   if(db){dbErr=[];
+    const o=await dbLoop(d.hist,names=>{d.stage='Suche in den Nährwert-Datenbanken: '+names.join(', ')+'.';render()});
+    res=normDB(parseJSON(o.text));d.src=res.used;
+   }else{
+    let o=await gemR(d.hist,SYS,GS);res=norm(parseJSON(o.text));addSrc(o);
+    if(!corr){d.stage='Schritt 2 von 2: Gegenprüfung mit zweiter Quelle.';render();
+     try{const o2=await gemR([{role:'user',parts:[...imgs,{text:info+'\n\nZu prüfende Analyse:\n'+o.text}]}],SYS_V,GS);const r2=norm(parseJSON(o2.text));addSrc(o2);o=o2;res=r2}
+     catch(e){res.notes.push('Die Gegenprüfung ist fehlgeschlagen ('+e.message+'). Angezeigt wird das ungeprüfte Ergebnis des ersten Durchgangs.')}}
+    d.hist.push({role:'model',parts:[{text:o.text}]});
+   }
+   d.res=res;d.corr='';
+   let m=S.meals.find(x=>x.id===d.mealId);
+   if(!m){m={id:uid(),date:today(),done:false,ts:Date.now(),thumb:d.imgs[0]?d.imgs[0].thumb:''};d.mealId=m.id;S.meals.push(m)}
+   Object.assign(m,{desc:res.desc,tot:res.tot,comps:res.comps,micros:res.micros,notes:res.notes,check:res.check,ask:res.ask,conf:res.conf,src:d.src.slice()});save();
+   notify('Analyse fertig',res.desc+' · '+r0(res.tot.kcal)+' kcal');
+  }catch(e){d.err='Fehler: '+e.message;if(corr)d.hist.length=len;notify('Analyse fehlgeschlagen',e.message)}
+  d.busy=false;unlock();render()},
+ analyze(){A.run('')},
+ correct(){const c=(draft.corr||'').trim();if(!c)return toast('Bitte Korrektur eingeben');A.run(c)},
+ fresh(){newDraft();render();scrollTo(0,0)},
+ favDraft(){const m=S.meals.find(x=>x.id===draft.mealId);if(!m)return;S.favs.unshift(Object.assign(JSON.parse(JSON.stringify(m)),{id:uid()}));save();toast('Als Favorit gespeichert')},
+ done(){const m=S.meals.find(x=>x.id===detail);m.done=!m.done;save();render()},
+ del(){S.meals=S.meals.filter(x=>x.id!==detail);save();A.go('tag');toast('Gelöscht')},
+ fav(){const m=S.meals.find(x=>x.id===detail);S.favs.unshift(Object.assign({},m,{id:uid()}));save();toast('Als Favorit gespeichert')},
+ favAdd(id){const f=S.favs.find(x=>x.id===id);const m=Object.assign(JSON.parse(JSON.stringify(f)),{id:uid(),date:today(),done:false,ts:Date.now()});S.meals.push(m);save();detail=m.id;A.go('detail');toast('Eingetragen')},
+ favDel(id){S.favs=S.favs.filter(x=>x.id!==id);save();render()},
+ setSave(){S.key=$('#s_key').value.trim();S.model=$('#s_model').value.trim()||S.model;S.mode=$('#s_mode').value;S.usda=$('#s_usda').value.trim();save();toast('Gespeichert');if(S.key&&!S.models.length)A.models();else if(S.key)A.go('neu')},
+ async models(){const key=$('#s_key').value.trim();if(!key)return toast('Erst API-Schlüssel eintragen');S.key=key;
+  try{const r=await fetch('https://generativelanguage.googleapis.com/v1beta/models?pageSize=200',{headers:{'x-goog-api-key':key}});const j=await r.json();if(!r.ok)throw new Error((j.error&&j.error.message)||'HTTP '+r.status);
+   S.models=(j.models||[]).filter(m=>(m.supportedGenerationMethods||[]).includes('generateContent')).map(m=>m.name.replace(/^models\//,'')).filter(n=>/^gemini-/.test(n)&&!/image|tts|audio|live|embedding|computer|transcribe|customtools|robotics/.test(n)).sort();
+   const fl=S.models.map(n=>({n,v:(n.match(/^gemini-(\d+(?:\.\d+)?)-flash$/)||[])[1]})).filter(x=>x.v).sort((a,b)=>parseFloat(b.v)-parseFloat(a.v));
+   if(!S.models.includes(S.model))S.model=S.models.includes('gemini-3.5-flash')?'gemini-3.5-flash':(fl.length?fl[0].n:S.model);
+   save();render();toast(S.models.length+' Modelle geladen, aktiv: '+S.model)}catch(e){toast('Fehler: '+e.message)}},
+ exp(){const b=new Blob([JSON.stringify(Object.assign({},S,{key:''}),null,1)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='makro-tracker-'+today()+'.json';document.body.appendChild(a);a.click();a.remove()},
+ async imp(inp){const f=inp.files[0];if(!f)return;try{const j=JSON.parse(await f.text());if(!Array.isArray(j.meals))throw new Error('Keine gültige Sicherung');const key=S.key;S=Object.assign(S,j);S.key=j.key||key;save();render();toast('Importiert: '+S.meals.length+' Mahlzeiten')}catch(e){toast('Fehler: '+e.message)}}
+};
+
+load();newDraft();if(!S.key)view='set';render();
+</script>
+</body>
+</html>
