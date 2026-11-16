@@ -337,7 +337,7 @@ const FOOD={};let dbErr=[];
 const MICID={vitA_ug:1106,vitD_ug:1114,vitE_mg:1109,vitC_mg:1162,b1_mg:1165,b2_mg:1166,b6_mg:1175,b12_ug:1178,folat_ug:1177,calcium_mg:1087,magnesium_mg:1090,eisen_mg:1089,zink_mg:1095,kalium_mg:1092};
 const FN=[{function_declarations:[{name:'suche_lebensmittel',description:'Sucht ein Lebensmittel in zwei Nährwert-Datenbanken und liefert Kandidaten mit id und Nährwerten pro 100 g. usda_query: englischer Suchbegriff für USDA FoodData Central (generische Lebensmittel, mit Zubereitungszustand). off_query: deutscher Suchbegriff für Open Food Facts (Markenprodukte, Fertigprodukte, Backwaren, typisch deutsche Produkte). Mindestens einen der beiden Suchbegriffe angeben.',parameters:{type:'object',properties:{name:{type:'string',description:'Bestandteil der Mahlzeit, für den gesucht wird'},usda_query:{type:'string',description:'z. B. "rice white cooked" oder "chicken breast roasted"'},off_query:{type:'string',description:'z. B. "Apfeltasche Blätterteig"'}},required:['name']}}]}];
 async function usda(q){
-  const r=await fetch('https://api.nal.usda.gov/fdc/v1/foods/search?api_key='+encodeURIComponent(S.usda||'DEMO_KEY')+'&query='+encodeURIComponent(q)+'&dataType='+encodeURIComponent('SR Legacy,Foundation')+'&pageSize=6');
+  const r=await fetch('https://api.nal.usda.gov/fdc/v1/foods/search?api_key='+encodeURIComponent(S.usda||'DEMO_KEY')+'&query='+encodeURIComponent(q)+'&dataType='+encodeURIComponent('SR Legacy,Foundation,Survey (FNDDS)')+'&pageSize=8');
   if(!r.ok)throw new Error(r.status===429?'Abfrage-Limit erreicht. Trage in den Einstellungen einen eigenen kostenlosen USDA-Schlüssel ein.':'HTTP '+r.status);
   const j=await r.json();
   return(j.foods||[]).map(f=>{const n={};(f.foodNutrients||[]).forEach(x=>{n[x.nutrientId]=x.value});
@@ -347,14 +347,18 @@ async function usda(q){
     FOOD[id]={name:f.description,src:'USDA FoodData Central',url:'https://fdc.nal.usda.gov/food-details/'+f.fdcId+'/nutrients',kcal,kh,p,f:ft,fib:num(n[1079]),sug:num(n[2000]??n[1063]),salt:num(n[1093])*2.5/1000,sat:num(n[1258]),mono:num(n[1292]),poly:num(n[1293]),mic};
     return{id,name:f.description,kcal:r0(kcal),kh:r1(kh),eiweiss:r1(p),fett:r1(ft)}});
 }
-async function off(q){
-  const r=await fetch('https://world.openfoodfacts.org/cgi/search.pl?search_terms='+encodeURIComponent(q)+'&search_simple=1&action=process&json=1&page_size=10&fields=code,product_name,brands,nutriments');
-  if(!r.ok)throw new Error(r.status===429?'Abfrage-Limit erreicht, bitte eine Minute warten.':'HTTP '+r.status);
-  const j=await r.json();
-  return(j.products||[]).filter(x=>x.product_name&&x.nutriments&&x.nutriments['energy-kcal_100g']!=null).slice(0,5).map(x=>{const n=x.nutriments,id='off:'+x.code,name=x.product_name+(x.brands?' ('+x.brands+')':'');
+// Open Food Facts: Anfragen nacheinander mit Pause (Limit des Dienstes), Ergebnisse je Suchbegriff merken, zwei Zugänge probieren
+const OFFC={};let offQ=Promise.resolve();
+function off(q){if(OFFC[q])return Promise.resolve(OFFC[q]);const job=offQ.then(()=>offRun(q));offQ=job.catch(()=>{}).then(()=>sleep(900));return job}
+async function offRun(q){let list=null,err=null;
+  const fields='code,product_name,brands,nutriments';
+  for(const url of['https://search.openfoodfacts.org/search?q='+encodeURIComponent(q)+'&page_size=10&langs=de&fields='+fields,'https://world.openfoodfacts.org/cgi/search.pl?search_terms='+encodeURIComponent(q)+'&search_simple=1&action=process&json=1&page_size=10&fields='+fields]){
+    try{const r=await fetch(url);if(!r.ok)throw new Error(r.status===429?'Abfrage-Limit erreicht, bitte eine Minute warten.':'HTTP '+r.status);const j=await r.json();list=j.hits||j.products||[];break}catch(e){err=e}}
+  if(!list)throw new Error(err&&err.message==='Failed to fetch'?'nicht erreichbar (vermutlich Abfrage-Limit oder vom Browser blockiert)':(err?err.message:'unbekannter Fehler'));
+  const out=list.filter(x=>x&&x.product_name&&x.nutriments&&x.nutriments['energy-kcal_100g']!=null).slice(0,5).map(x=>{const n=x.nutriments,id='off:'+x.code,br=Array.isArray(x.brands)?x.brands.join(', '):x.brands,name=x.product_name+(br?' ('+br+')':'');
     FOOD[id]={name,src:'Open Food Facts',url:'https://world.openfoodfacts.org/product/'+x.code,kcal:num(n['energy-kcal_100g']),kh:num(n.carbohydrates_100g),p:num(n.proteins_100g),f:num(n.fat_100g),fib:num(n.fiber_100g),sug:num(n.sugars_100g),salt:num(n.salt_100g),sat:num(n['saturated-fat_100g']),mono:num(n['monounsaturated-fat_100g']),poly:num(n['polyunsaturated-fat_100g']),mic:null};
     const f=FOOD[id];return{id,name,kcal:r0(f.kcal),kh:r1(f.kh),eiweiss:r1(f.p),fett:r1(f.f)}});
-}
+  OFFC[q]=out;return out}
 async function lookup(a){a=a||{};const out={usda:[],off:[]},jobs=[];
   if(a.usda_query)jobs.push(usda(a.usda_query).then(r=>{out.usda=r}).catch(e=>{out.usda_fehler=e.message;dbErr.push('USDA: '+e.message)}));
   if(a.off_query)jobs.push(off(a.off_query).then(r=>{out.off=r}).catch(e=>{out.off_fehler=e.message;dbErr.push('Open Food Facts: '+e.message)}));
@@ -383,6 +387,17 @@ function normDB(j){
   if(dbErr.length)r.notes.push('Datenbank-Fehler während der Suche: '+[...new Set(dbErr)].join(' | '));
   if(miss)r.conf='niedrig';
   r.used=used;return r}
+// Yazio-Import: Kalorien und Makros kommen aus Yazio, die Datenbank ergänzt nur Ballaststoffe, Fettsäuren und Mikronährstoffe
+function applyYazio(res,pj,date){const raw=Array.isArray(pj.bestandteile)?pj.bestandteile:[];let miss=0;
+  res.comps.forEach((c,i)=>{const yk=num((raw[i]||{}).yazio_kcal);if(yk>0)c.kcal=yk;if(/^Plausibilität/.test(c.warn))c.warn='';
+    if(/^Kein Datenbankeintrag/.test(c.warn)){miss++;c.warn='';c.kh=c.p=c.f=0;c.p100=null;c.sn='Yazio (nur Kalorien)';c.info='Kein vergleichbarer Datenbankeintrag gefunden. Ballaststoffe und Mikronährstoffe fehlen für diesen Eintrag.'}});
+  const all=(Array.isArray(pj.uebersprungen)?pj.uebersprungen:[]).filter(u=>u&&u.name);all.forEach(u=>{u.hit=S.meals.some(m=>!m.yazio&&m.date===date&&Math.abs(r0(m.tot.kcal)-num(u.kcal))<=2)});
+  const sk=all.filter(u=>u.hit),sub=k=>sk.reduce((a,u)=>a+num(u[k]),0),hs=pj.yazio_summe,t=res.tot;
+  if(hs&&num(hs.kcal)>0){t.kcal=Math.max(0,num(hs.kcal)-sub('kcal'));t.kh=Math.max(0,num(hs.kh)-sub('kh'));t.p=Math.max(0,num(hs.eiweiss)-sub('eiweiss'));t.f=Math.max(0,num(hs.fett)-sub('fett'));
+    res.conf='Makros aus Yazio';res.notes.unshift('Kalorien und Makros sind die Summen aus deinem Yazio-Screenshot'+(sk.length?', abzüglich der schon als Foto-Mahlzeit erfassten Schnell-Einträge':'')+'. Die Datenbanken ergänzen nur Ballaststoffe, Fettsäuren und Mikronährstoffe.')}
+  else{t.kcal=res.comps.reduce((a,c)=>a+c.kcal,0);res.conf='niedrig';res.notes.unshift('Die vier Summenfelder (Kalorien, Kohlenhydrate, Eiweiß, Fett) waren im Screenshot nicht lesbar. Die Kalorien sind aus den Einzeleinträgen addiert, die Makros stammen nur aus gefundenen Datenbankeinträgen und sind unvollständig. Nimm den Screenshot so auf, dass die Summenfelder oben sichtbar sind, und analysiere erneut.')}
+  all.forEach(u=>res.notes.push(u.hit?'Abgezogen, weil schon als Foto-Mahlzeit erfasst: '+u.name+' ('+r0(num(u.kcal))+' kcal).':(hs&&num(hs.kcal)>0?'In der Summe enthalten: Schnell-Eintrag „'+u.name+'“ ('+r0(num(u.kcal))+' kcal), weil es an diesem Tag keine Foto-Mahlzeit mit diesen Kalorien gibt.':'Achtung: Schnell-Eintrag „'+u.name+'“ ('+r0(num(u.kcal))+' kcal) fehlt in dieser Summe.')));
+  if(miss)res.notes.push(miss+' von '+res.comps.length+' Einträgen haben keinen Datenbankeintrag. Ballaststoffe und Mikronährstoffe dieser Mahlzeit sind deshalb zu niedrig angegeben.')}
 const SYS_DB=`Du bist ein gewissenhafter Nährwert-Analyst. Du bekommst Fotos einer Mahlzeit und/oder eine Beschreibung. Jede Anfrage ist eigenständig.
 
 WICHTIG: Du nennst KEINE Nährwerte aus dem Gedächtnis. Alle Nährwerte kommen aus der Funktion suche_lebensmittel, und die App rechnet selbst. Deine Aufgabe ist: Bestandteile erkennen, Mengen schätzen und den passenden Datenbankeintrag auswählen.
@@ -415,10 +430,11 @@ WICHTIG: Du nennst KEINE Nährwerte aus dem Gedächtnis. Alle Nährwerte kommen 
 
 VORGEHEN
 1. Ablesen: Lies jeden Eintrag exakt ab: Name, Marke, Menge und kcal. Mengen NICHT schätzen, sondern übernehmen. Rechne ml in g um (Milch: 1 ml = 1,03 g, wasserähnliche Getränke 1:1).
-2. Überspringen: Einträge ohne Mengenangabe, bei denen nur Kohlenhydrate, Eiweiß und Fett stehen (in Yazio per "Schnell hinzufügen" erfasst), nimmst du NICHT auf. Trage sie mit Name und kcal in "uebersprungen" ein.
+2. Summen ablesen: Stehen im Screenshot die vier Summenfelder der Mahlzeit (Kalorien, Kohlenhydrate, Eiweiß, Fett), trage sie exakt in "yazio_summe" ein. Sind sie nicht sichtbar: "yazio_summe": null. Diese Summen sind maßgeblich, die App übernimmt sie unverändert.
+2b. Überspringen: Einträge ohne Mengenangabe, bei denen nur Kohlenhydrate, Eiweiß und Fett stehen (in Yazio per "Schnell hinzufügen" erfasst), nimmst du NICHT in "bestandteile" auf. Trage sie mit Name, kcal und den drei angezeigten Makros in "uebersprungen" ein.
 3. Suchen: Rufe für jeden übrigen Eintrag suche_lebensmittel auf, alle Aufrufe möglichst gleichzeitig. Grundlebensmittel: usda_query auf Englisch ("banana raw", "milk whole 3.25% fat"). Markenprodukte: off_query mit Name und Marke UND zusätzlich usda_query mit einem generischen englischen Begriff ("whey protein powder", "oats rolled dry").
 4. Auswählen: Nimm den Kandidaten, dessen kcal für die abgelesene Menge am besten zu den kcal aus Yazio passen (Abweichung möglichst unter 15 %). Bei ähnlich guter Passung bevorzuge USDA-Einträge, weil nur sie Mikronährstoffe enthalten. Passt nichts, suche einmal mit anderen Begriffen erneut.
-5. Kein passender Eintrag: quelle_id = null setzen und schaetzung_pro100g nur mit dem aus Yazio ableitbaren kcal-Wert füllen (übrige Felder 0). Niemals eine quelle_id erfinden.
+5. Die Datenbank dient hier nur dazu, Ballaststoffe, Fettsäuren und Mikronährstoffe zu ergänzen. Nimm deshalb IMMER den nächstliegenden generischen Eintrag, auch wenn Marke oder Sorte nicht exakt passen (Beispiele: Butterkäse -> "cheese, semisoft" oder "cheese, havarti"; Körniger Frischkäse -> "cottage cheese"; Bergsteigermüsli -> "muesli, dried fruit and nuts"; Vollmilch 3,5 % -> "milk, whole"). quelle_id = null nur, wenn es wirklich nichts Vergleichbares gibt. Niemals eine quelle_id erfinden.
 6. Selbstkontrolle: Sind alle Einträge erfasst oder bewusst übersprungen? Stimmen die Mengen mit dem Screenshot überein? Ergebnis kurz in "pruefung" eintragen.
 
 AUSGABE: Erst wenn alle Suchen abgeschlossen sind, antworte AUSSCHLIESSLICH mit einem JSON-Objekt, ohne Text davor oder danach, auf Deutsch:
@@ -428,7 +444,8 @@ AUSGABE: Erst wenn alle Suchen abgeschlossen sind, antworte AUSSCHLIESSLICH mit 
   {"name":"Name wie in Yazio", "menge_g":0, "mengen_hinweis":"Menge laut Yazio, z. B. 350 ml", "yazio_kcal":0, "quelle_id":"usda:12345", "schaetzung_pro100g":null, "unsicherheit":""}
  ],
  "pruefung": [],
- "uebersprungen": [{"name":"", "kcal":0}],
+ "yazio_summe": {"kcal":0, "kh":0, "eiweiss":0, "fett":0},
+ "uebersprungen": [{"name":"", "kcal":0, "kh":0, "eiweiss":0, "fett":0}],
  "anmerkungen": [],
  "rueckfrage": null,
  "vertrauen": "hoch | mittel | niedrig"
@@ -496,10 +513,11 @@ addEventListener('popstate',e=>{
   if(pend){hdepth=Math.max(0,hdepth-pend.k);view=pend.v;pend=null;try{history.replaceState(hst(),'')}catch(_){}shown();return}
   hdepth=Math.max(0,hdepth-1);const st=e.state;if(!st)return;view=st.v;detail=st.detail;dayKey=st.dayKey||dayKey;slideDir='r';shown()});
 // Wischen: links/rechts wechselt den Reiter, auf Unterseiten geht Wischen nach rechts zurück
-let tX=0,tY=0,tT=0,tOk=false;
-document.addEventListener('touchstart',e=>{const t=e.touches[0];tOk=e.touches.length===1&&t.clientX>30&&t.clientX<innerWidth-30&&!e.target.closest('textarea,input,select,nav');tX=t.clientX;tY=t.clientY;tT=Date.now()},{passive:true});
+let tX=0,tY=0,tT=0,tOk=false,tWk=false;
+document.addEventListener('touchstart',e=>{const t=e.touches[0];tOk=e.touches.length===1&&t.clientX>30&&t.clientX<innerWidth-30&&!e.target.closest('textarea,input,select,nav');tX=t.clientX;tY=t.clientY;tT=Date.now();tWk=!!e.target.closest('.wk')},{passive:true});
 document.addEventListener('touchend',e=>{if(!tOk)return;tOk=false;const t=e.changedTouches[0],dx=t.clientX-tX,dy=t.clientY-tY;
   if(Math.abs(dx)<70||Math.abs(dx)<2.2*Math.abs(dy)||Date.now()-tT>700)return;
+  if(tWk&&view==='woche'){A.week(dx>0?-1:1);return}
   const i=TABS.indexOf(view);if(i<0){if(dx>0)A.back();return}
   const n=i+(dx<0?1:-1);if(n<0||n>=TABS.length)return;slideDir=dx<0?'l':'r';A.go(TABS[n])},{passive:true});
 function countUp(){document.querySelectorAll('#app [data-count]').forEach(el=>{const to=+el.dataset.count,t0=performance.now(),D=650;if(!(to>0))return;const f=n=>{const k=Math.min(1,(n-t0)/D),e=1-Math.pow(1-k,3);el.textContent=Math.round(to*e);if(k<1)requestAnimationFrame(f)};requestAnimationFrame(f)})}
@@ -570,9 +588,9 @@ function copyBlock(m){const rows=[['Beschreibung',m.desc,m.desc],['Brennwert (kc
 function resultHTML(m,src){
  const micros=MIC.filter(([k])=>m.micros&&m.micros[k]!=null);
  return hero(m)+(m.yazio?'':copyBlock(m))+
- `<div class="card"><div class="row sp"><h3 style="margin:0">Bestandteile</h3>${m.conf?`<span class="tag ${/hoch/i.test(m.conf)?'ok':'w'}">Vertrauen: ${esc(m.conf)}</span>`:''}</div>${m.comps.map(c=>`<div class="comp"><div class="row sp"><b>${esc(c.name)}</b><span class="num">${r0(c.g)} g</span></div>
-   <div class="sm num">${r0(c.kcal)} kcal · K ${r1(c.kh)} g · E ${r1(c.p)} g · F ${r1(c.f)} g</div>
-   ${c.p100?`<div class="sm mut num">pro 100 g: ${r0(c.p100.kcal)} kcal · K ${r1(c.p100.kh)} · E ${r1(c.p100.p)} · F ${r1(c.p100.f)}</div>`:''}
+ `<div class="card"><div class="row sp"><h3 style="margin:0">Bestandteile</h3>${m.conf?`<span class="tag ${/hoch|^Makros/i.test(m.conf)?'ok':'w'}">${/^Makros/.test(m.conf)?'':'Vertrauen: '}${esc(m.conf)}</span>`:''}</div>${m.comps.map(c=>`<div class="comp"><div class="row sp"><b>${esc(c.name)}</b><span class="num">${r0(c.g)} g</span></div>
+   ${m.yazio?`<div class="sm num">${r0(c.kcal)} kcal laut Yazio</div>`:`<div class="sm num">${r0(c.kcal)} kcal · K ${r1(c.kh)} g · E ${r1(c.p)} g · F ${r1(c.f)} g</div>
+   ${c.p100?`<div class="sm mut num">pro 100 g: ${r0(c.p100.kcal)} kcal · K ${r1(c.p100.kh)} · E ${r1(c.p100.p)} · F ${r1(c.p100.f)}</div>`:''}`}${c.info?`<div class="sm mut">${esc(c.info)}</div>`:''}
    ${c.hint?`<div class="sm mut">${esc(c.hint)}</div>`:''}${c.unc?`<div class="sm" style="color:var(--warn)">${esc(c.unc)}</div>`:''}
    ${c.warn?`<div class="sm" style="color:var(--bad)">${esc(c.warn)}</div>`:''}
    <div class="sm">Quelle: ${c.su?`<a href="${esc(c.su)}" target="_blank" rel="noopener">${esc(c.sn||c.su)}</a>`:esc(c.sn||'nicht angegeben')}${c.s2n||c.s2u?` · Gegenprüfung: ${c.s2u?`<a href="${esc(c.s2u)}" target="_blank" rel="noopener">${esc(c.s2n||c.s2u)}</a>`:esc(c.s2n)}`:''}</div></div>`).join('')}</div>
@@ -625,7 +643,7 @@ function vWoche(){
  <div class="row sp" style="margin-top:10px"><div><div class="big num" data-count="${r0(td.t.kcal)}">${r0(td.t.kcal)}</div><div class="mut sm">kcal erfasst</div></div><div style="text-align:right"><div class="big num" style="color:var(--acc)">${r0(Math.abs(g.kcal-td.t.kcal))}</div><div class="mut sm">${td.t.kcal>g.kcal?'kcal über Ziel':'kcal bis Ziel'}</div></div></div>
  <div style="margin-top:12px">${bar(td.t.kcal,g.kcal,'var(--acc)')}</div>${macroBars(td.t)}
  <div class="sm mut" style="margin-top:12px">Ballaststoffe <b class="num">${r1(td.t.fib)} / ${g.fib} g</b></div></div>`;
- h+=`<div class="card"><div class="row sp"><h3 style="margin:0">Erfasste Kalorien pro Tag</h3><span class="sm mut" style="white-space:nowrap">┄ Ziel ${g.kcal}</span></div><div class="chart"><div class="goal" style="bottom:${g.kcal/mx*100}%"></div>
+ h+=`<div class="card wk"><div class="row sp"><h3 style="margin:0">Erfasste Kalorien pro Tag</h3><span class="sm mut" style="white-space:nowrap">┄ Ziel ${g.kcal}</span></div><div class="chart"><div class="goal" style="bottom:${g.kcal/mx*100}%"></div>
  ${ds.map((d,i)=>`<div class="c" onclick="A.openDay('${ks[i]}')"><em class="num">${d.has?r0(d.t.kcal):''}</em><i class="${d.has?'':'none'}" style="height:${d.t.kcal/mx*100}%"></i></div>`).join('')}</div>
  <div class="days">${['Mo','Di','Mi','Do','Fr','Sa','So'].map((x,i)=>`<span style="${ks[i]===today()?'color:var(--acc);font-weight:700':''}">${x}</span>`).join('')}</div></div>`;
  const rows=ks.map((k,i)=>({k,d:ds[i]})).filter(x=>x.d.has&&x.k!==today()).reverse();
@@ -703,7 +721,7 @@ const A={
   shown()},
  back(){if(hdepth>0){try{history.back();return}catch(e){}}A.go({detail:'tag',day:'woche',fav:'tag'}[view]||'neu')},
  lim(v){S.lim=S.lim||{};const n=num(v);if(n>0)S.lim[S.model]=n;else delete S.lim[S.model];save();render()},
- week(n){const k=addD(weekOf,7*n);if(k<=monday(today())){weekOf=k;render()}},
+ week(n){const k=addD(weekOf,7*n);if(k<=monday(today())){weekOf=k;animNext=true;slideDir=n>0?'l':'r';render()}else toast('Das ist die aktuelle Woche')},
  open(id){detail=id;A.go('detail')},
  async img(inp){for(const f of inp.files){try{draft.imgs.push(await readImg(f))}catch(e){toast(e.message)}}inp.value='';render()},
  rmImg(n){draft.imgs.splice(n,1);render()},
@@ -723,8 +741,7 @@ const A={
    if(db){dbErr=[];
     const o=await dbLoop(d.hist,names=>{d.stage='Suche in den Nährwert-Datenbanken: '+names.join(', ')+'.';render()},yz?SYS_YZ:SYS_DB);
     const pj=parseJSON(o.text);res=normDB(pj);d.src=res.used;
-    if(yz){res.yazio=true;(Array.isArray(pj.uebersprungen)?pj.uebersprungen:[]).forEach(u=>{if(!u||!u.name)return;const hit=S.meals.some(m=>!m.yazio&&m.date===d.date&&Math.abs(r0(m.tot.kcal)-num(u.kcal))<=2);
-      res.notes.push(hit?'Übersprungen, weil schon als Foto-Mahlzeit erfasst: '+u.name+' ('+r0(num(u.kcal))+' kcal).':'Achtung: „'+u.name+'“ ('+r0(num(u.kcal))+' kcal) wurde als Schnell-Eintrag übersprungen, aber an diesem Tag gibt es keine Foto-Mahlzeit mit diesen Kalorien. Der Eintrag fehlt in der Statistik.')})}
+    if(yz){res.yazio=true;applyYazio(res,pj,d.date)}
    }else{
     let o=await gemR(d.hist,SYS,GS);res=norm(parseJSON(o.text));addSrc(o);
     if(!corr){d.stage='Schritt 2 von 2: Gegenprüfung mit zweiter Quelle.';render();
