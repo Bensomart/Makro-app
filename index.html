@@ -270,9 +270,9 @@ async function gem(contents,sys,tools){
   if(!S.key)throw new Error('Kein API-Schlüssel hinterlegt. Bitte unter „Einstellungen“ eintragen.');
   const body={contents,system_instruction:{parts:[{text:sys}]}};
   if(tools)body.tools=tools;
-  const r=await fetch('https://generativelanguage.googleapis.com/v1beta/models/'+encodeURIComponent(S.model)+':generateContent',{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':S.key},body:JSON.stringify(body)});
+  const r=await fetch('https://generativelanguage.googleapis.com/v1beta/models/'+encodeURIComponent(runModel||S.model)+':generateContent',{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':S.key},body:JSON.stringify(body)});
   const j=await r.json().catch(()=>({}));
-  if(!r.ok)throw new Error((j.error&&j.error.message)||('HTTP '+r.status));
+  if(!r.ok){const msg=(j.error&&j.error.message)||('HTTP '+r.status),er=new Error(msg);er.overload=r.status===503||r.status===500||/high demand|overloaded|unavailable/i.test(msg);er.quota=r.status===429;throw er}
   const c=j.candidates&&j.candidates[0];
   if(!c)throw new Error('Keine Antwort erhalten'+(j.promptFeedback&&j.promptFeedback.blockReason?' ('+j.promptFeedback.blockReason+')':''));
   const text=((c.content&&c.content.parts)||[]).filter(p=>p.text&&!p.thought).map(p=>p.text).join('');
@@ -385,7 +385,21 @@ AUSGABE: Erst wenn alle Suchen abgeschlossen sind, antworte AUSSCHLIESSLICH mit 
 }`;
 
 function visible(){return new Promise(ok=>{if(document.visibilityState==='visible')return setTimeout(ok,1500);const f=()=>{if(document.visibilityState==='visible'){document.removeEventListener('visibilitychange',f);setTimeout(ok,800)}};document.addEventListener('visibilitychange',f)})}
-async function gemR(c,sy,se){try{return await gem(c,sy,se)}catch(e){if(e instanceof TypeError){await visible();return await gem(c,sy,se)}throw e}}  // Netzabbruch (z. B. App im Hintergrund): einmal wiederholen
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const FALLBACK=['gemini-3.5-flash','gemini-3.5-flash-lite','gemini-3.1-flash-lite','gemini-3.6-flash','gemini-3.8-flash'];
+let runModel=null,usedFallback='';
+function say(m){if(draft&&draft.busy){draft.stage=m;render()}}
+// Robuster Aufruf: Netzabbruch -> bis zu 3 neue Versuche; Überlastung -> 2 Versuche mit Pause, dann Ersatzmodell; Limit erreicht -> Ersatzmodell
+async function gemR(c,sy,tl){let net=0,busy=0;const tried=new Set([runModel||S.model]);
+  for(;;){
+    try{return await gem(c,sy,tl)}
+    catch(e){
+      if(e instanceof TypeError){if(++net>3)throw new Error('Keine Verbindung zu Google. Prüfe deine Internetverbindung und tippe erneut auf „Analysieren“.');say('Verbindung unterbrochen, neuer Versuch.');await visible();continue}
+      if(e.overload&&busy<2){busy++;say('Das Modell ist gerade überlastet. Neuer Versuch in '+busy*4+' Sekunden.');await sleep(busy*4000);continue}
+      if(e.overload||e.quota){const nx=FALLBACK.find(m=>!tried.has(m)&&(!S.models.length||S.models.includes(m)));
+        if(nx){tried.add(nx);runModel=nx;usedFallback=nx;busy=0;say((e.quota?'Limit erreicht':'Modell überlastet')+'. Wechsle auf Ersatzmodell '+nx+'.');continue}
+        throw new Error(e.quota?'Das Anfrage-Limit ist bei allen verfügbaren Modellen erreicht. Das Tageslimit wird um 9 Uhr zurückgesetzt. ('+e.message+')':'Google meldet gerade Überlastung bei allen verfügbaren Modellen. Bitte in ein paar Minuten erneut versuchen.')}
+      throw e}}}
 let wl=null;async function lock(){try{wl=await navigator.wakeLock.request('screen')}catch(e){}}function unlock(){try{wl&&wl.release()}catch(e){}wl=null}
 let swReg=null;if('serviceWorker' in navigator&&location.protocol==='https:')navigator.serviceWorker.register('sw.js').then(r=>{swReg=r}).catch(()=>{});
 const canNotify=()=>!!swReg&&'Notification' in window&&Notification.permission==='granted';
@@ -435,7 +449,7 @@ REGELN
 - Keine Diagnosen und keine Dosierungen von Nahrungsergänzungsmitteln. Bei gesundheitlichen Beschwerden verweise an Arzt oder Ernährungsberatung.
 
 `;
-async function coach(msgs){const o=await gemR(msgs,COACH+ctx(),null);return o.text.trim()}
+async function coach(msgs){runModel=null;usedFallback='';const o=await gemR(msgs,COACH+ctx(),null);return o.text.trim()}
 
 function macroGrid(t){return `<div class="grid4" style="text-align:center;margin-top:10px">${[['kcal',r0(t.kcal)],['Kohlenhydr.',r0(t.kh)+' g'],['Eiweiß',r0(t.p)+' g'],['Fett',r0(t.f)+' g']].map(x=>`<div><b class="num" style="font-size:20px">${x[1]}</b><br><span class="sm mut">${x[0]}</span></div>`).join('')}</div>`}
 function mealRow(m){return `<div class="meal" onclick="A.open('${m.id}')"><div class="th" style="${m.thumb?`background-image:url(${m.thumb})`:''}">${m.thumb?'':IC(ICO.plate)}</div>
@@ -578,7 +592,7 @@ const A={
  async run(corr){const d=draft,yzCheck=x=>x.kind==='yazio'&&!x.imgs.length;
   if(!corr&&yzCheck(d)){d.err='Bitte zuerst einen Yazio-Screenshot auswählen.';return render()}
   if(!corr&&!d.imgs.length&&!d.text.trim()){d.err='Bitte ein Foto aufnehmen oder die Mahlzeit beschreiben.';return render()}
-  const yz=d.kind==='yazio',db=yz||S.mode!=='google';askNotify();
+  const yz=d.kind==='yazio',db=yz||S.mode!=='google';askNotify();runModel=null;usedFallback='';
   d.busy=true;d.err='';d.stage=yz?'Lese Yazio-Einträge.':db?'Erkenne Bestandteile.':'Schritt 1 von 2: Bestandteile erkennen und Nährwerte online recherchieren.';render();lock();
   const len=d.hist.length;
   const addSrc=o=>{const seen=new Set(d.src.map(s=>s.uri));o.src.forEach(s=>{if(!seen.has(s.uri)){seen.add(s.uri);d.src.push(s)}})};
@@ -600,6 +614,7 @@ const A={
      catch(e){res.notes.push('Die Gegenprüfung ist fehlgeschlagen ('+e.message+'). Angezeigt wird das ungeprüfte Ergebnis des ersten Durchgangs.')}}
     d.hist.push({role:'model',parts:[{text:o.text}]});
    }
+   if(usedFallback)res.notes.push('Weil '+S.model+' überlastet oder am Limit war, hat das Ersatzmodell '+usedFallback+' diese Analyse erstellt.');
    d.res=res;d.corr='';
    let m=S.meals.find(x=>x.id===d.mealId);
    if(!m){m={id:uid(),date:yz?d.date:today(),done:yz,yazio:yz,ts:Date.now(),thumb:d.imgs[0]?d.imgs[0].thumb:''};d.mealId=m.id;S.meals.push(m)}
