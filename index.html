@@ -237,7 +237,7 @@ const LS='makrotracker.v1';
 // Vitamin D: Schätzwert bei fehlender Eigenproduktion. Zink: Mitte der Spanne 11 bis 16 mg. Kalium, Magnesium: Schätzwerte.
 const MIC=[['vitA_ug','Vitamin A','µg',850],['vitD_ug','Vitamin D','µg',20],['vitE_mg','Vitamin E','mg',8],['vitC_mg','Vitamin C','mg',110],['b1_mg','Vitamin B1','mg',1.2],['b2_mg','Vitamin B2','mg',1.4],['b6_mg','Vitamin B6','mg',1.6],['b12_ug','Vitamin B12','µg',4],['folat_ug','Folat','µg',300],['calcium_mg','Calcium','mg',1000],['magnesium_mg','Magnesium','mg',350],['eisen_mg','Eisen','mg',11],['zink_mg','Zink','mg',14],['kalium_mg','Kalium','mg',4000]];
 const GOALS={kcal:2700,kh:362,p:138,f:70,fib:30};
-let S={key:'',model:'gemini-3.5-flash',mode:'db',usda:'',models:[],meals:[],favs:[],goals:Object.assign({},GOALS),profile:'Lean Bulk: Ich möchte langsam Muskelmasse aufbauen und mich allgemein gesünder ernähren.',chat:[],fb:{},ui:{design:'edel',mode:'dark',style:'auto'}};
+let S={key:'',model:'gemini-3.5-flash',mode:'db',usda:'',cmodel:'gemini-3.5-flash-lite',models:[],meals:[],favs:[],goals:Object.assign({},GOALS),profile:'Lean Bulk: Ich möchte langsam Muskelmasse aufbauen und mich allgemein gesünder ernähren.',chat:[],fb:{},ui:{design:'edel',mode:'dark',style:'auto'}};
 function load(){try{const j=JSON.parse(localStorage.getItem(LS));if(j){S=Object.assign(S,j);S.goals=Object.assign({},GOALS,j.goals||{});S.ui=Object.assign({design:'edel',mode:'dark',style:'auto'},j.ui||{});if(/^gemini-2\./.test(S.model))S.model='gemini-3.5-flash'}}catch(e){}}
 function save(){try{localStorage.setItem(LS,JSON.stringify(S))}catch(e){toast('Speichern fehlgeschlagen: '+e.message)}}
 const zero=()=>({kcal:0,kh:0,p:0,f:0,fib:0,sug:0,salt:0,sat:0,mono:0,poly:0});
@@ -309,10 +309,10 @@ function pacDay(){try{return new Intl.DateTimeFormat('en-CA',{timeZone:'America/
 function usage(){const d=pacDay();if(!S.use||S.use.day!==d)S.use={day:d,n:{},hd:{}};return S.use}
 function useCount(m,r){const u=usage();u.n[m]=(u.n[m]||0)+1;try{const rem=r.headers.get('x-ratelimit-remaining-requests'),lim=r.headers.get('x-ratelimit-limit-requests');if(rem!=null&&rem!=='')u.hd[m]={rem:+rem,lim:lim?+lim:null}}catch(e){}save()}
 function resetIn(){try{const p=new Intl.DateTimeFormat('en-GB',{timeZone:'America/Los_Angeles',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}).formatToParts(new Date()),g=t=>+p.find(x=>x.type===t).value;const sec=86400-((g('hour')%24)*3600+g('minute')*60+g('second'));return{h:Math.floor(sec/3600),m:Math.floor(sec%3600/60),at:new Date(Date.now()+sec*1000).toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})}}catch(e){return null}}
-function usageHTML(){const u=usage(),ri=resetIn(),ms=[...new Set([S.model,...Object.keys(u.n)])],lim=S.lim||{};
- return `<div class="card"><h3 style="margin-top:0">Gemini-Nutzung heute</h3>${ms.map(m=>{const n=u.n[m]||0,L=num(lim[m]),hd=u.hd[m];return `<div style="padding:8px 0;border-top:1px solid var(--line)"><div class="row sp"><b class="sm">${esc(m)}</b><span class="num sm">${n}${L?' von '+L:''} Anfragen</span></div>${L?bar(n,L,'var(--acc)')+`<div class="sm mut" style="margin-top:4px">noch etwa ${Math.max(0,L-n)} übrig</div>`:''}${hd?`<div class="sm mut">Laut Google noch ${hd.rem}${hd.lim?' von '+hd.lim:''} übrig</div>`:''}</div>`}).join('')}
+function usageHTML(){const u=usage(),ri=resetIn(),ms=[...new Set([S.model,S.cmodel,...Object.keys(u.n),...Object.keys(u.ex||{})])].filter(Boolean),lim=S.lim||{};
+ return `<div class="card"><h3 style="margin-top:0">Gemini-Nutzung heute</h3>${ms.map(m=>{const n=u.n[m]||0,L=num(lim[m])||DEFLIM[m]||0,hd=u.hd[m],full=u.ex&&u.ex[m];return `<div style="padding:8px 0;border-top:1px solid var(--line)"><div class="row sp"><b class="sm">${esc(m)}</b><span class="num sm">${n}${L?' von '+L:''} Anfragen</span></div>${L?bar(full?L:n,L,'var(--acc)')+`<div class="sm mut" style="margin-top:4px">${full?'Heute nicht mehr verfügbar (Limit erreicht oder Modell gesperrt)':'noch etwa '+Math.max(0,L-n)+' übrig'}</div>`:full?'<div class="sm mut">Heute nicht mehr verfügbar (Limit erreicht oder Modell gesperrt)</div>':''}${hd?`<div class="sm mut">Laut Google noch ${hd.rem}${hd.lim?' von '+hd.lim:''} übrig</div>`:''}</div>`}).join('')}
  <div class="sm mut" style="margin-top:8px">${ri?`Zurücksetzung in ${ri.h} Std. ${ri.m} Min. (um ${ri.at} Uhr).`:''} Gezählt werden nur Anfragen aus dieser App auf diesem Gerät.</div>
- <label>Tageslimit für ${esc(S.model)} (optional, Wert aus <a href="https://aistudio.google.com/rate-limit" target="_blank" rel="noopener">AI Studio</a>)</label><input inputmode="numeric" value="${esc(lim[S.model]||'')}" placeholder="z. B. 20" onchange="A.lim(this.value)"></div>`}
+ <label>Tageslimit für ${esc(S.model)} (optional, Wert aus <a href="https://aistudio.google.com/rate-limit" target="_blank" rel="noopener">AI Studio</a>)</label><input inputmode="numeric" value="${esc(lim[S.model]||'')}" placeholder="${DEFLIM[S.model]?'Standard: '+DEFLIM[S.model]:'z. B. 20'}" onchange="A.lim(this.value)"></div>`}
 async function gem(contents,sys,tools,cfg){
   if(!S.key)throw new Error('Kein API-Schlüssel hinterlegt. Bitte unter „Einstellungen“ eintragen.');
   const body={contents,system_instruction:{parts:[{text:sys}]}};
@@ -322,7 +322,7 @@ async function gem(contents,sys,tools,cfg){
   const r=await fetch('https://generativelanguage.googleapis.com/v1beta/models/'+encodeURIComponent(mdl)+':generateContent',{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':S.key},body:JSON.stringify(body)});
   useCount(mdl,r);
   const j=await r.json().catch(()=>({}));
-  if(!r.ok){const msg=(j.error&&j.error.message)||('HTTP '+r.status),er=new Error(msg);er.overload=r.status===503||r.status===500||/high demand|overloaded|unavailable/i.test(msg);er.quota=r.status===429;throw er}
+  if(!r.ok){const msg=(j.error&&j.error.message)||('HTTP '+r.status),er=new Error(msg);er.overload=r.status===503||r.status===500||/high demand|overloaded|unavailable/i.test(msg);er.quota=r.status===429;er.gone=r.status===404||/no longer available|is not found|not supported for generateContent/i.test(msg);er.daily=er.quota&&/per\s?day|PerDay|daily/i.test(JSON.stringify(j.error||{}));throw er}
   const c=j.candidates&&j.candidates[0];
   if(!c)throw new Error('Keine Antwort erhalten'+(j.promptFeedback&&j.promptFeedback.blockReason?' ('+j.promptFeedback.blockReason+')':''));
   const text=((c.content&&c.content.parts)||[]).filter(p=>p.text&&!p.thought).map(p=>p.text).join('');
@@ -436,18 +436,27 @@ AUSGABE: Erst wenn alle Suchen abgeschlossen sind, antworte AUSSCHLIESSLICH mit 
 
 function visible(){return new Promise(ok=>{if(document.visibilityState==='visible')return setTimeout(ok,1500);const f=()=>{if(document.visibilityState==='visible'){document.removeEventListener('visibilitychange',f);setTimeout(ok,800)}};document.addEventListener('visibilitychange',f)})}
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
-const FALLBACK=['gemini-3.5-flash','gemini-3.5-flash-lite','gemini-3.1-flash-lite','gemini-3.6-flash','gemini-3.8-flash'];
+// Reihenfolge: erst die großen Flash-Modelle (je 20 Anfragen/Tag im Gratis-Tarif), dann die Lite-Modelle (je 500/Tag)
+const FALLBACK=['gemini-3.8-flash','gemini-3.6-flash','gemini-3.5-flash','gemini-3.5-flash-lite','gemini-3.1-flash-lite'];
+const DEFLIM={'gemini-3.8-flash':20,'gemini-3.6-flash':20,'gemini-3-flash-preview':20,'gemini-2.5-flash':20,'gemini-2.5-flash-lite':20,'gemini-3.5-flash-lite':500,'gemini-3.1-flash-lite':500};   // Gratis-Limits laut AI Studio des Nutzers, 16.11.2026
+const avail=m=>!S.models.length||S.models.includes(m);
 let runModel=null,usedFallback='';
 function say(m){if(draft&&draft.busy){draft.stage=m;render()}}
 // Robuster Aufruf: Netzabbruch -> bis zu 3 neue Versuche; Überlastung -> 2 Versuche mit Pause, dann Ersatzmodell; Limit erreicht -> Ersatzmodell
-async function gemR(c,sy,tl,cfg){let net=0,busy=0;const tried=new Set([runModel||S.model]);
+async function gemR(c,sy,tl,cfg){let net=0,busy=0,minute=0;const u=usage(),ex=u.ex||(u.ex={});
+  // Modell, dessen Tageslimit heute schon erreicht war, gar nicht erst anfragen
+  if(ex[runModel||S.model]){const nx=FALLBACK.find(m=>!ex[m]&&avail(m));if(nx){runModel=nx;usedFallback=nx}}
+  const tried=new Set([runModel||S.model]);
   for(;;){
     try{return await gem(c,sy,tl,cfg)}
     catch(e){
       if(e instanceof TypeError){if(++net>3)throw new Error('Keine Verbindung zu Google. Prüfe deine Internetverbindung und tippe erneut auf „Analysieren“.');say('Verbindung unterbrochen, neuer Versuch.');await visible();continue}
       if(e.overload&&busy<2){busy++;say('Das Modell ist gerade überlastet. Neuer Versuch in '+busy*4+' Sekunden.');await sleep(busy*4000);continue}
-      if(e.overload||e.quota){const nx=FALLBACK.find(m=>!tried.has(m)&&(!S.models.length||S.models.includes(m)));
-        if(nx){tried.add(nx);runModel=nx;usedFallback=nx;busy=0;say((e.quota?'Limit erreicht':'Modell überlastet')+'. Wechsle auf Ersatzmodell '+nx+'.');continue}
+      if(e.quota&&!e.daily&&minute<1){minute++;say('Limit pro Minute erreicht. Neuer Versuch in 20 Sekunden.');await sleep(20000);continue}
+      if(e.overload||e.quota||e.gone){if(e.daily||e.gone){ex[runModel||S.model]=1;save()}
+        const nx=FALLBACK.find(m=>!tried.has(m)&&!ex[m]&&avail(m));
+        if(nx){tried.add(nx);runModel=nx;usedFallback=nx;busy=0;minute=0;say((e.quota?'Limit erreicht':e.gone?'Modell nicht verfügbar':'Modell überlastet')+'. Wechsle auf Ersatzmodell '+nx+'.');continue}
+        if(e.gone)throw e;
         throw new Error(e.quota?'Das Anfrage-Limit ist bei allen verfügbaren Modellen erreicht. Das Tageslimit wird um 9 Uhr zurückgesetzt. ('+e.message+')':'Google meldet gerade Überlastung bei allen verfügbaren Modellen. Bitte in ein paar Minuten erneut versuchen.')}
       throw e}}}
 let wl=null;async function lock(){try{wl=await navigator.wakeLock.request('screen')}catch(e){}}function unlock(){try{wl&&wl.release()}catch(e){}wl=null}
@@ -528,7 +537,7 @@ AUSGABE: Antworte immer mit genau einem JSON-Objekt:
 {"text":"deine Antwort als Fließtext, kurz","vorschlaege":[{"name":"Name des Gerichts","beschreibung":"ein Satz","warum":"ein Satz, warum es heute zu den offenen Makros passt","zeit_min":20,"kcal":0,"kh":0,"eiweiss":0,"fett":0,"zutaten":[{"name":"Zutat mit Zustand (roh/gekocht)","g":0}],"zubereitung":["kurzer Schritt"],"bild_suche":"gängiger deutscher Name des Gerichts für eine Wikipedia-Bildsuche, z. B. Chili con Carne"}]}
 
 `;
-async function coachChat(msgs){runModel=null;usedFallback='';const o=await gemR(msgs,COACH_CHAT+ctx(),null,{responseMimeType:'application/json'});let j;try{j=parseJSON(o.text)}catch(e){j={text:o.text}}
+async function coachChat(msgs){runModel=S.cmodel&&S.cmodel!==S.model?S.cmodel:null;usedFallback='';const o=await gemR(msgs,COACH_CHAT+ctx(),null,{responseMimeType:'application/json'});let j;try{j=parseJSON(o.text)}catch(e){j={text:o.text}}
   const sug=(Array.isArray(j.vorschlaege)?j.vorschlaege:[]).slice(0,4).filter(v=>v&&v.name).map(v=>({name:String(v.name),desc:String(v.beschreibung||''),why:String(v.warum||''),min:num(v.zeit_min),kcal:num(v.kcal),kh:num(v.kh),p:num(v.eiweiss),f:num(v.fett),ing:(Array.isArray(v.zutaten)?v.zutaten:[]).map(z=>({name:String(z.name||''),g:num(z.g)})).filter(z=>z.name),steps:(Array.isArray(v.zubereitung)?v.zubereitung:[]).map(String),q:String(v.bild_suche||v.name),img:null}));
   return{text:String(j.text||(sug.length?'':o.text)).trim(),raw:o.text,sug}}
 // Symbolbild aus Wikipedia (deutsch, dann englisch), sonst Wikimedia Commons
@@ -544,7 +553,7 @@ function sugHTML(v,mi,si){return `<div class="card sug">${v.img===''?'':`<div cl
  ${v.desc?`<div class="sm mut" style="margin-top:6px">${esc(v.desc)}</div>`:''}${v.why?`<div class="sm" style="margin-top:6px;color:var(--acc)">${esc(v.why)}</div>`:''}
  <details style="margin-top:10px"><summary>Zutaten und Zubereitung</summary><ul class="sm" style="margin:6px 0;padding-left:18px">${v.ing.map(z=>`<li>${z.g?r0(z.g)+' g ':''}${esc(z.name)}</li>`).join('')}</ul>${v.steps.length?`<ol class="sm" style="margin:6px 0;padding-left:18px">${v.steps.map(x=>`<li>${esc(x)}</li>`).join('')}</ol>`:''}</details>
  <button class="full" style="margin-top:12px" onclick="A.sugLog(${mi},${si})">Gegessen? Als Mahlzeit erfassen</button></div>`}
-async function coach(msgs){runModel=null;usedFallback='';const o=await gemR(msgs,COACH+ctx(),null);return o.text.trim()}
+async function coach(msgs){runModel=S.cmodel&&S.cmodel!==S.model?S.cmodel:null;usedFallback='';const o=await gemR(msgs,COACH+ctx(),null);return o.text.trim()}
 
 function macroGrid(t){return `<div class="grid4" style="text-align:center;margin-top:10px">${[['kcal',r0(t.kcal)],['Kohlenhydr.',r0(t.kh)+' g'],['Eiweiß',r0(t.p)+' g'],['Fett',r0(t.f)+' g']].map(x=>`<div><b class="num" style="font-size:20px">${x[1]}</b><br><span class="sm mut">${x[0]}</span></div>`).join('')}</div>`}
 function mealRow(m){return `<div class="meal" onclick="A.open('${m.id}')"><div class="th" style="${m.thumb?`background-image:url(${m.thumb})`:''}">${m.thumb?'':IC(ICO.plate)}</div>
@@ -660,6 +669,8 @@ function vSet(){
  <label>API-Schlüssel (<a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">in Google AI Studio erstellen</a>)</label><input id="s_key" type="password" value="${esc(S.key)}" placeholder="AIza…" autocomplete="off">
  <label>Modell</label>${S.models.length?`<select id="s_model">${[...new Set([S.model,...S.models])].map(m=>`<option ${m===S.model?'selected':''}>${esc(m)}</option>`).join('')}</select>`:`<input id="s_model" value="${esc(S.model)}">`}
  <div class="row" style="margin-top:10px"><button class="pri grow" onclick="A.setSave()">Speichern</button><button onclick="A.models()">Modelle laden</button></div>
+ <label>Modell für Coach und Feedback</label>${S.models.length?`<select id="s_cmodel">${[...new Set([S.cmodel,...S.models])].map(m=>`<option ${m===S.cmodel?'selected':''}>${esc(m)}</option>`).join('')}</select>`:`<input id="s_cmodel" value="${esc(S.cmodel)}">`}
+ <div class="sm mut" style="margin-top:6px">Tipp: Für Foto-Analysen ein großes Flash-Modell (wenige Anfragen pro Tag), für den Coach ein Lite-Modell (viele Anfragen pro Tag). Ist ein Limit erreicht, wechselt die App automatisch.</div>
  <label>Woher kommen die Nährwerte?</label><select id="s_mode"><option value="db" ${S.mode!=='google'?'selected':''}>Nährwert-Datenbanken (kostenlos)</option><option value="google" ${S.mode==='google'?'selected':''}>Google-Suche (bezahlter Gemini-Tarif nötig)</option></select>
  <label>USDA-Schlüssel (optional, <a href="https://fdc.nal.usda.gov/api-key-signup" target="_blank" rel="noopener">kostenlos anfordern</a>)</label><input id="s_usda" value="${esc(S.usda)}" placeholder="leer = Test-Schlüssel mit kleinem Limit" autocomplete="off">
  <div class="row" style="margin-top:10px"><button class="grow" onclick="A.setSave()">Speichern</button></div>
@@ -757,7 +768,7 @@ const A={
  fav(){const m=S.meals.find(x=>x.id===detail);S.favs.unshift(Object.assign({},m,{id:uid()}));save();toast('Als Favorit gespeichert')},
  favAdd(id){const f=S.favs.find(x=>x.id===id);const m=Object.assign(JSON.parse(JSON.stringify(f)),{id:uid(),date:today(),done:false,ts:Date.now()});S.meals.push(m);save();detail=m.id;A.go('detail');toast('Eingetragen')},
  favDel(id){S.favs=S.favs.filter(x=>x.id!==id);save();render()},
- setSave(){S.key=$('#s_key').value.trim();S.model=$('#s_model').value.trim()||S.model;S.mode=$('#s_mode').value;S.usda=$('#s_usda').value.trim();save();toast('Gespeichert');if(S.key&&!S.models.length)A.models();else if(S.key)A.go('neu')},
+ setSave(){S.key=$('#s_key').value.trim();S.model=$('#s_model').value.trim()||S.model;S.cmodel=$('#s_cmodel').value.trim()||S.cmodel;S.mode=$('#s_mode').value;S.usda=$('#s_usda').value.trim();save();toast('Gespeichert');if(S.key&&!S.models.length)A.models();else if(S.key)A.go('neu')},
  async models(){const key=$('#s_key').value.trim();if(!key)return toast('Erst API-Schlüssel eintragen');S.key=key;
   try{const r=await fetch('https://generativelanguage.googleapis.com/v1beta/models?pageSize=200',{headers:{'x-goog-api-key':key}});const j=await r.json();if(!r.ok)throw new Error((j.error&&j.error.message)||'HTTP '+r.status);
    S.models=(j.models||[]).filter(m=>(m.supportedGenerationMethods||[]).includes('generateContent')).map(m=>m.name.replace(/^models\//,'')).filter(n=>/^gemini-/.test(n)&&!/image|tts|audio|live|embedding|computer|transcribe|customtools|robotics/.test(n)).sort();
