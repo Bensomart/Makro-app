@@ -82,6 +82,10 @@ html[data-style=wein][data-style]{--acc:#b84a63;--onacc:#fff}html[data-style=wei
 html[data-style=graphit][data-style]{--acc:#8e97a8;--onacc:#10131a}html[data-style=graphit][data-mode=light]{--acc:#4a5261;--onacc:#fff}
 html[data-style=neutral][data-style]{--acc:#ffffff;--onacc:#111111}html[data-style=neutral][data-mode=light]{--acc:#151515;--onacc:#fff}
 /* Animationen (nur beim Wechsel der Ansicht und bei neuem Ergebnis) */
+@keyframes inL{from{opacity:0;transform:translateX(46px)}}
+@keyframes inR{from{opacity:0;transform:translateX(-46px)}}
+#app.anim.sl>*{animation:inL .3s cubic-bezier(.2,.8,.2,1) both;animation-delay:0s!important}
+#app.anim.sr>*{animation:inR .3s cubic-bezier(.2,.8,.2,1) both;animation-delay:0s!important}
 @keyframes up{from{opacity:0;transform:translateY(14px)}}
 @keyframes growX{from{transform:scaleX(0)}}
 @keyframes growY{from{transform:scaleY(0)}}
@@ -195,6 +199,8 @@ details[open] summary::after{content:'–'}
 .msg{max-width:88%;padding:12px 15px;border-radius:20px;margin:8px 0;font-size:15px;line-height:1.55;overflow-wrap:anywhere}
 .msg.user{background:var(--acc);color:var(--onacc);margin-left:auto;border-bottom-right-radius:6px}
 .msg.ai{background:var(--card);border-bottom-left-radius:6px}
+.sug{padding:14px}.sugimg{height:150px;border-radius:calc(var(--r) - 8px);margin-bottom:12px;background:var(--track) center/cover}.sugimg:not(.ok){animation:pulse 1.2s ease-in-out infinite}
+@keyframes pulse{50%{opacity:.45}}
 .chatin{display:flex;gap:8px;align-items:flex-end;margin-top:14px}
 .chatin textarea{min-height:48px;border-radius:24px;resize:none}
 .seg{display:flex;background:var(--inp);border-radius:var(--rb);padding:4px;margin-bottom:14px}
@@ -298,11 +304,23 @@ VORGEHEN
 `+FORMAT;
 
 const GS=[{google_search:{}}];
-async function gem(contents,sys,tools){
+// Zählt die von dieser App gesendeten Anfragen pro Modell; Googles Tageszähler startet um Mitternacht pazifischer Zeit neu.
+function pacDay(){try{return new Intl.DateTimeFormat('en-CA',{timeZone:'America/Los_Angeles'}).format(new Date())}catch(e){return today()}}
+function usage(){const d=pacDay();if(!S.use||S.use.day!==d)S.use={day:d,n:{},hd:{}};return S.use}
+function useCount(m,r){const u=usage();u.n[m]=(u.n[m]||0)+1;try{const rem=r.headers.get('x-ratelimit-remaining-requests'),lim=r.headers.get('x-ratelimit-limit-requests');if(rem!=null&&rem!=='')u.hd[m]={rem:+rem,lim:lim?+lim:null}}catch(e){}save()}
+function resetIn(){try{const p=new Intl.DateTimeFormat('en-GB',{timeZone:'America/Los_Angeles',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}).formatToParts(new Date()),g=t=>+p.find(x=>x.type===t).value;const sec=86400-((g('hour')%24)*3600+g('minute')*60+g('second'));return{h:Math.floor(sec/3600),m:Math.floor(sec%3600/60),at:new Date(Date.now()+sec*1000).toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})}}catch(e){return null}}
+function usageHTML(){const u=usage(),ri=resetIn(),ms=[...new Set([S.model,...Object.keys(u.n)])],lim=S.lim||{};
+ return `<div class="card"><h3 style="margin-top:0">Gemini-Nutzung heute</h3>${ms.map(m=>{const n=u.n[m]||0,L=num(lim[m]),hd=u.hd[m];return `<div style="padding:8px 0;border-top:1px solid var(--line)"><div class="row sp"><b class="sm">${esc(m)}</b><span class="num sm">${n}${L?' von '+L:''} Anfragen</span></div>${L?bar(n,L,'var(--acc)')+`<div class="sm mut" style="margin-top:4px">noch etwa ${Math.max(0,L-n)} übrig</div>`:''}${hd?`<div class="sm mut">Laut Google noch ${hd.rem}${hd.lim?' von '+hd.lim:''} übrig</div>`:''}</div>`}).join('')}
+ <div class="sm mut" style="margin-top:8px">${ri?`Zurücksetzung in ${ri.h} Std. ${ri.m} Min. (um ${ri.at} Uhr).`:''} Gezählt werden nur Anfragen aus dieser App auf diesem Gerät.</div>
+ <label>Tageslimit für ${esc(S.model)} (optional, Wert aus <a href="https://aistudio.google.com/rate-limit" target="_blank" rel="noopener">AI Studio</a>)</label><input inputmode="numeric" value="${esc(lim[S.model]||'')}" placeholder="z. B. 20" onchange="A.lim(this.value)"></div>`}
+async function gem(contents,sys,tools,cfg){
   if(!S.key)throw new Error('Kein API-Schlüssel hinterlegt. Bitte unter „Einstellungen“ eintragen.');
   const body={contents,system_instruction:{parts:[{text:sys}]}};
   if(tools)body.tools=tools;
-  const r=await fetch('https://generativelanguage.googleapis.com/v1beta/models/'+encodeURIComponent(runModel||S.model)+':generateContent',{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':S.key},body:JSON.stringify(body)});
+  if(cfg)body.generationConfig=cfg;
+  const mdl=runModel||S.model;
+  const r=await fetch('https://generativelanguage.googleapis.com/v1beta/models/'+encodeURIComponent(mdl)+':generateContent',{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':S.key},body:JSON.stringify(body)});
+  useCount(mdl,r);
   const j=await r.json().catch(()=>({}));
   if(!r.ok){const msg=(j.error&&j.error.message)||('HTTP '+r.status),er=new Error(msg);er.overload=r.status===503||r.status===500||/high demand|overloaded|unavailable/i.test(msg);er.quota=r.status===429;throw er}
   const c=j.candidates&&j.candidates[0];
@@ -422,9 +440,9 @@ const FALLBACK=['gemini-3.5-flash','gemini-3.5-flash-lite','gemini-3.1-flash-lit
 let runModel=null,usedFallback='';
 function say(m){if(draft&&draft.busy){draft.stage=m;render()}}
 // Robuster Aufruf: Netzabbruch -> bis zu 3 neue Versuche; Überlastung -> 2 Versuche mit Pause, dann Ersatzmodell; Limit erreicht -> Ersatzmodell
-async function gemR(c,sy,tl){let net=0,busy=0;const tried=new Set([runModel||S.model]);
+async function gemR(c,sy,tl,cfg){let net=0,busy=0;const tried=new Set([runModel||S.model]);
   for(;;){
-    try{return await gem(c,sy,tl)}
+    try{return await gem(c,sy,tl,cfg)}
     catch(e){
       if(e instanceof TypeError){if(++net>3)throw new Error('Keine Verbindung zu Google. Prüfe deine Internetverbindung und tippe erneut auf „Analysieren“.');say('Verbindung unterbrochen, neuer Versuch.');await visible();continue}
       if(e.overload&&busy<2){busy++;say('Das Modell ist gerade überlastet. Neuer Versuch in '+busy*4+' Sekunden.');await sleep(busy*4000);continue}
@@ -459,7 +477,22 @@ function scale(img,max,q){const k=Math.min(1,max/Math.max(img.width,img.height))
 function readImg(file){return new Promise((ok,no)=>{const u=URL.createObjectURL(file);const i=new Image();i.onload=()=>{try{const big=scale(i,1280,.82),th=scale(i,240,.6);URL.revokeObjectURL(u);ok({mime:'image/jpeg',data:big.split(',')[1],url:big,thumb:th})}catch(e){no(e)}};i.onerror=()=>no(new Error('Bild konnte nicht gelesen werden'));i.src=u})}
 
 /* ---------- Zustand der Oberfläche ---------- */
-let animNext=true;
+let animNext=true,slideDir='',hdepth=0,pend=null;
+const TABS=['neu','tag','woche','coach','set'];
+const LV=v=>v==='neu'?0:TABS.includes(v)?1:2;   // Ebene: Start, Reiter, Unterseite
+const hst=()=>({v:view,detail,dayKey});
+function shown(){if(view==='neu'&&!draft)newDraft();animNext=true;render();scrollTo(0,0);if(view==='coach')loadSugImgs()}
+// Zurück-Geste / Zurück-Taste von Android
+addEventListener('popstate',e=>{
+  if(pend){hdepth=Math.max(0,hdepth-pend.k);view=pend.v;pend=null;try{history.replaceState(hst(),'')}catch(_){}shown();return}
+  hdepth=Math.max(0,hdepth-1);const st=e.state;if(!st)return;view=st.v;detail=st.detail;dayKey=st.dayKey||dayKey;slideDir='r';shown()});
+// Wischen: links/rechts wechselt den Reiter, auf Unterseiten geht Wischen nach rechts zurück
+let tX=0,tY=0,tT=0,tOk=false;
+document.addEventListener('touchstart',e=>{const t=e.touches[0];tOk=e.touches.length===1&&t.clientX>30&&t.clientX<innerWidth-30&&!e.target.closest('textarea,input,select,nav');tX=t.clientX;tY=t.clientY;tT=Date.now()},{passive:true});
+document.addEventListener('touchend',e=>{if(!tOk)return;tOk=false;const t=e.changedTouches[0],dx=t.clientX-tX,dy=t.clientY-tY;
+  if(Math.abs(dx)<70||Math.abs(dx)<2.2*Math.abs(dy)||Date.now()-tT>700)return;
+  const i=TABS.indexOf(view);if(i<0){if(dx>0)A.back();return}
+  const n=i+(dx<0?1:-1);if(n<0||n>=TABS.length)return;slideDir=dx<0?'l':'r';A.go(TABS[n])},{passive:true});
 function countUp(){document.querySelectorAll('#app [data-count]').forEach(el=>{const to=+el.dataset.count,t0=performance.now(),D=650;if(!(to>0))return;const f=n=>{const k=Math.min(1,(n-t0)/D),e=1-Math.pow(1-k,3);el.textContent=Math.round(to*e);if(k<1)requestAnimationFrame(f)};requestAnimationFrame(f)})}
 let view='neu',weekOf=monday(today()),draft=null,detail=null,dayKey=today(),fbBusy=false,chatBusy=false;
 function newDraft(){draft={kind:'meal',date:today(),imgs:[],text:'',res:null,src:[],hist:[],busy:false,err:'',corr:''}}
@@ -469,7 +502,7 @@ function bar(v,g,col){const p=g>0?Math.min(100,v/g*100):0;return `<div class="ba
 function macroBars(t){const g=S.goals;return `<div class="row" style="gap:14px;margin-top:12px">${[['Kohlenhydr.',t.kh,g.kh,'var(--kh)'],['Eiweiß',t.p,g.p,'var(--pr)'],['Fett',t.f,g.f,'var(--ft)']].map(x=>`<div class="mac"><span class="sm mut">${x[0]}</span>${bar(x[1],x[2],x[3])}<b class="num">${r0(x[1])} / ${x[2]} g</b></div>`).join('')}</div>`}
 const fmt=t=>esc(t).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/^\s*[*-]\s+/gm,'• ').replace(/\n/g,'<br>');
 /* ---------- Coach ---------- */
-function ctx(){const g=S.goals;let s='PROFIL UND ZIEL: '+S.profile+'\nTAGESZIELE: '+g.kcal+' kcal, '+g.kh+' g Kohlenhydrate, '+g.p+' g Eiweiß, '+g.f+' g Fett, '+g.fib+' g Ballaststoffe.\nHEUTE IST: '+today()+'\n\nERFASSTE TAGE (letzte 14 Tage; enthalten ist nur, was in der App erfasst wurde, Tage können unvollständig sein):\n';let any=false;
+function ctx(){const g=S.goals,tt=dayData(today()).t,now=new Date();let s='JETZT: '+now.toLocaleDateString('de-DE',{weekday:'long'})+', '+String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0')+' Uhr.\nHEUTE NOCH OFFEN BIS ZUM ZIEL (nur aus den erfassten Einträgen berechnet): '+r0(g.kcal-tt.kcal)+' kcal, '+r0(g.kh-tt.kh)+' g Kohlenhydrate, '+r0(g.p-tt.p)+' g Eiweiß, '+r0(g.f-tt.f)+' g Fett, '+r0(g.fib-tt.fib)+' g Ballaststoffe (negative Werte = Ziel schon überschritten).\n'+'PROFIL UND ZIEL: '+S.profile+'\nTAGESZIELE: '+g.kcal+' kcal, '+g.kh+' g Kohlenhydrate, '+g.p+' g Eiweiß, '+g.f+' g Fett, '+g.fib+' g Ballaststoffe.\nHEUTE IST: '+today()+'\n\nERFASSTE TAGE (letzte 14 Tage; enthalten ist nur, was in der App erfasst wurde, Tage können unvollständig sein):\n';let any=false;
  for(let i=0;i<14;i++){const k=addD(today(),-i),d=dayData(k);if(!d.has)continue;any=true;const t=d.t;
   s+=k+': '+r0(t.kcal)+' kcal, KH '+r0(t.kh)+' g, Eiweiß '+r0(t.p)+' g, Fett '+r0(t.f)+' g'+(t.sat+t.mono+t.poly>0?' (gesättigt '+r1(t.sat)+' g, einfach ungesättigt '+r1(t.mono)+' g, mehrfach ungesättigt '+r1(t.poly)+' g)':'')+', Ballaststoffe '+r1(t.fib)+' g, Zucker '+r1(t.sug)+' g, Salz '+r1(t.salt)+' g. Mikronährstoffe in % der DGE-Empfehlung für Männer (0 kann auch "keine Daten" heißen): '+MIC.map(([key,n,u,ref])=>n+' '+r0(d.mic[key]/ref*100)).join(', ')+'. Einträge: '+d.ms.map(m=>m.desc+' ['+m.comps.map(c=>c.name+' '+r0(c.g)+' g').join(', ')+']').join(' | ')+'\n'}
  return s+(any?'':'(noch keine Tage erfasst)\n')}
@@ -483,6 +516,34 @@ REGELN
 - Keine Diagnosen und keine Dosierungen von Nahrungsergänzungsmitteln. Bei gesundheitlichen Beschwerden verweise an Arzt oder Ernährungsberatung.
 
 `;
+const COACH_CHAT=COACH+`ESSENSVORSCHLÄGE
+- Fragt der Nutzer, was er essen oder kochen kann, oder nennt er Zutaten, die er zuhause hat, gib 2 bis 4 deutlich unterschiedliche Vorschläge im Feld "vorschlaege".
+- Richte Portionen an den heute noch offenen Makros aus (vor allem Eiweiß) und an der Uhrzeit (Frühstück, Mittag, Abend, Snack). Ist heute noch nichts erfasst, sag das und gehe von einem normalen Tagesanteil aus.
+- Nennt er vorhandene Zutaten, verwende nur diese plus Grundzutaten (Salz, Gewürze, etwas Öl). Fehlt ihm etwas, biete in der nächsten Antwort Ersatz oder eine angepasste Variante an.
+- Variiere: nicht mehrmals dasselbe Grundgericht, und berücksichtige, was er in den letzten Tagen schon gegessen hat.
+- Die Nährwerte der Vorschläge sind deine Schätzung: runde auf 5 und schreibe im Text, dass es Richtwerte sind.
+- Bei Rückfragen oder Diskussion ohne neue Gerichte bleibt "vorschlaege" leer.
+
+AUSGABE: Antworte immer mit genau einem JSON-Objekt:
+{"text":"deine Antwort als Fließtext, kurz","vorschlaege":[{"name":"Name des Gerichts","beschreibung":"ein Satz","warum":"ein Satz, warum es heute zu den offenen Makros passt","zeit_min":20,"kcal":0,"kh":0,"eiweiss":0,"fett":0,"zutaten":[{"name":"Zutat mit Zustand (roh/gekocht)","g":0}],"zubereitung":["kurzer Schritt"],"bild_suche":"gängiger deutscher Name des Gerichts für eine Wikipedia-Bildsuche, z. B. Chili con Carne"}]}
+
+`;
+async function coachChat(msgs){runModel=null;usedFallback='';const o=await gemR(msgs,COACH_CHAT+ctx(),null,{responseMimeType:'application/json'});let j;try{j=parseJSON(o.text)}catch(e){j={text:o.text}}
+  const sug=(Array.isArray(j.vorschlaege)?j.vorschlaege:[]).slice(0,4).filter(v=>v&&v.name).map(v=>({name:String(v.name),desc:String(v.beschreibung||''),why:String(v.warum||''),min:num(v.zeit_min),kcal:num(v.kcal),kh:num(v.kh),p:num(v.eiweiss),f:num(v.fett),ing:(Array.isArray(v.zutaten)?v.zutaten:[]).map(z=>({name:String(z.name||''),g:num(z.g)})).filter(z=>z.name),steps:(Array.isArray(v.zubereitung)?v.zubereitung:[]).map(String),q:String(v.bild_suche||v.name),img:null}));
+  return{text:String(j.text||(sug.length?'':o.text)).trim(),raw:o.text,sug}}
+// Symbolbild aus Wikipedia (deutsch, dann englisch), sonst Wikimedia Commons
+async function wikiImg(q){const pick=async(host,extra)=>{const r=await fetch('https://'+host+'/w/api.php?action=query&format=json&origin=*&generator=search&gsrlimit=3&gsrsearch='+encodeURIComponent(q)+extra);if(!r.ok)return'';const j=await r.json(),pg=Object.values((j.query&&j.query.pages)||{}).sort((a,b)=>(a.index||0)-(b.index||0));for(const x of pg){const u=(x.thumbnail&&x.thumbnail.source)||(x.imageinfo&&x.imageinfo[0]&&x.imageinfo[0].thumburl);if(u&&!/\.svg/i.test(u))return u}return''};
+  for(const[h,e]of[['de.wikipedia.org','&prop=pageimages&piprop=thumbnail&pithumbsize=640'],['en.wikipedia.org','&prop=pageimages&piprop=thumbnail&pithumbsize=640'],['commons.wikimedia.org','&gsrnamespace=6&prop=imageinfo&iiprop=url&iiurlwidth=640']]){try{const u=await pick(h,e);if(u)return u}catch(e){}}
+  return''}
+async function loadSugImgs(){let ch=false;for(const el of document.querySelectorAll('.sugimg[data-mi]')){const m=S.chat[+el.dataset.mi],v=m&&m.sug&&m.sug[+el.dataset.si];if(!v||v.img!==null)continue;v.img='';const u=await wikiImg(v.q);v.img=u;ch=true;
+    const cur=document.querySelector('.sugimg[data-mi="'+el.dataset.mi+'"][data-si="'+el.dataset.si+'"]');if(cur){if(u){cur.style.backgroundImage='url("'+u.replace(/"/g,'%22')+'")';cur.classList.add('ok')}else cur.remove()}}
+  if(ch)save()}
+function sugHTML(v,mi,si){return `<div class="card sug">${v.img===''?'':`<div class="sugimg ${v.img?'ok':''}" data-mi="${mi}" data-si="${si}" style="${v.img?`background-image:url(&quot;${esc(v.img)}&quot;)`:''}"></div>`}
+ <b style="font-size:17px">${esc(v.name)}</b>
+ <div class="sm num" style="margin-top:4px">ca. ${r0(v.kcal)} kcal · K ${r0(v.kh)} · E ${r0(v.p)} · F ${r0(v.f)}${v.min?' · '+r0(v.min)+' Min.':''}</div>
+ ${v.desc?`<div class="sm mut" style="margin-top:6px">${esc(v.desc)}</div>`:''}${v.why?`<div class="sm" style="margin-top:6px;color:var(--acc)">${esc(v.why)}</div>`:''}
+ <details style="margin-top:10px"><summary>Zutaten und Zubereitung</summary><ul class="sm" style="margin:6px 0;padding-left:18px">${v.ing.map(z=>`<li>${z.g?r0(z.g)+' g ':''}${esc(z.name)}</li>`).join('')}</ul>${v.steps.length?`<ol class="sm" style="margin:6px 0;padding-left:18px">${v.steps.map(x=>`<li>${esc(x)}</li>`).join('')}</ol>`:''}</details>
+ <button class="full" style="margin-top:12px" onclick="A.sugLog(${mi},${si})">Gegessen? Als Mahlzeit erfassen</button></div>`}
 async function coach(msgs){runModel=null;usedFallback='';const o=await gemR(msgs,COACH+ctx(),null);return o.text.trim()}
 
 function macroGrid(t){return `<div class="grid4" style="text-align:center;margin-top:10px">${[['kcal',r0(t.kcal)],['Kohlenhydr.',r0(t.kh)+' g'],['Eiweiß',r0(t.p)+' g'],['Fett',r0(t.f)+' g']].map(x=>`<div><b class="num" style="font-size:20px">${x[1]}</b><br><span class="sm mut">${x[0]}</span></div>`).join('')}</div>`}
@@ -541,7 +602,7 @@ function vNeu(){const d=draft;
  return h}
 
 function vDetail(){const m=S.meals.find(x=>x.id===detail);if(!m){view='tag';return vTag()}
- return `<div class="row sp"><button class="ghost" onclick="A.go('tag')">‹ Zurück</button><span class="mut sm">${fmtD(m.date)}</span></div><h1>${esc(m.desc)}</h1>
+ return `<div class="row sp"><button class="ghost" onclick="A.back()">‹ Zurück</button><span class="mut sm">${fmtD(m.date)}</span></div><h1>${esc(m.desc)}</h1>
  ${m.yazio?'':`<div class="card row sp"><span>In Yazio übertragen</span><button class="${m.done?'pri':''}" onclick="A.done()">${m.done?'✓ Erledigt':'Als erledigt markieren'}</button></div>`}`+
  resultHTML(m,m.src)+`<div class="row"><button class="grow" onclick="A.fav()">★ Als Favorit speichern</button><button class="dng" onclick="A.del()">Löschen</button></div>`}
 
@@ -555,7 +616,7 @@ function vWoche(){
  <div class="row sp" style="margin-top:10px"><div><div class="big num" data-count="${r0(td.t.kcal)}">${r0(td.t.kcal)}</div><div class="mut sm">kcal erfasst</div></div><div style="text-align:right"><div class="big num" style="color:var(--acc)">${r0(Math.abs(g.kcal-td.t.kcal))}</div><div class="mut sm">${td.t.kcal>g.kcal?'kcal über Ziel':'kcal bis Ziel'}</div></div></div>
  <div style="margin-top:12px">${bar(td.t.kcal,g.kcal,'var(--acc)')}</div>${macroBars(td.t)}
  <div class="sm mut" style="margin-top:12px">Ballaststoffe <b class="num">${r1(td.t.fib)} / ${g.fib} g</b></div></div>`;
- h+=`<div class="card"><h3 style="margin-top:0">Erfasste Kalorien pro Tag</h3><div class="chart"><div class="goal" style="bottom:${g.kcal/mx*100}%">Ziel ${g.kcal}</div>
+ h+=`<div class="card"><div class="row sp"><h3 style="margin:0">Erfasste Kalorien pro Tag</h3><span class="sm mut" style="white-space:nowrap">┄ Ziel ${g.kcal}</span></div><div class="chart"><div class="goal" style="bottom:${g.kcal/mx*100}%"></div>
  ${ds.map((d,i)=>`<div class="c" onclick="A.openDay('${ks[i]}')"><em class="num">${d.has?r0(d.t.kcal):''}</em><i class="${d.has?'':'none'}" style="height:${d.t.kcal/mx*100}%"></i></div>`).join('')}</div>
  <div class="days">${['Mo','Di','Mi','Do','Fr','Sa','So'].map((x,i)=>`<span style="${ks[i]===today()?'color:var(--acc);font-weight:700':''}">${x}</span>`).join('')}</div></div>`;
  const rows=ks.map((k,i)=>({k,d:ds[i]})).filter(x=>x.d.has&&x.k!==today()).reverse();
@@ -567,7 +628,7 @@ function vWoche(){
 
 function vDay(){const k=dayKey,d=dayData(k),t=d.t,g=S.goals,fk=t.sat+t.mono+t.poly,fb=S.fb[k];
  const mic=MIC.map(([key,nm,u,ref])=>({nm,u,ref,v:d.mic[key]})).filter(x=>x.v>0);
- let h=`<div class="row sp"><button class="ghost" onclick="A.go('woche')">‹ Statistik</button><span class="mut sm">${d.ms.length} ${d.ms.length===1?'Eintrag':'Einträge'}</span></div><h1>${fmtD(k)}</h1>
+ let h=`<div class="row sp"><button class="ghost" onclick="A.back()">‹ Statistik</button><span class="mut sm">${d.ms.length} ${d.ms.length===1?'Eintrag':'Einträge'}</span></div><h1>${fmtD(k)}</h1>
  <div class="card"><div class="row sp"><div><div class="big num">${r0(t.kcal)}</div><div class="mut sm">kcal erfasst</div></div><div style="text-align:right"><div class="big num" style="color:var(--acc)">${r0(Math.abs(g.kcal-t.kcal))}</div><div class="mut sm">${t.kcal>g.kcal?'kcal über Ziel':'kcal bis Ziel'}</div></div></div>
  <div style="margin-top:12px">${bar(t.kcal,g.kcal,'var(--acc)')}</div>${macroBars(t)}
  <div class="mic" style="margin-top:14px"><span>Ballaststoffe</span>${bar(t.fib,g.fib)}<span class="num mut" style="text-align:right">${r1(t.fib)} / ${g.fib} g</span></div>
@@ -583,8 +644,9 @@ function vDay(){const k=dayKey,d=dayData(k),t=d.t,g=S.goals,fk=t.sat+t.mono+t.po
 
 function vCoach(){
  let h=`<div class="row sp"><h1>Coach</h1>${S.chat.length?'<button onclick="A.chatClear()">Neu beginnen</button>':''}</div>`;
- if(!S.chat.length)h+=`<div class="card"><div class="sm mut" style="margin-bottom:12px">Sprich über deine Ernährung und deinen Lean Bulk. Der Coach kennt deine Ziele und die erfassten letzten 14 Tage.</div>${['Wie war meine Woche bisher?','Was sollte ich heute noch essen?','Wie viel Eiweiß brauche ich für den Lean Bulk?','Esse ich zu viel gesättigtes Fett?'].map(q=>`<button class="full" style="margin-top:8px;text-align:left;border-radius:16px" onclick="A.chatSend(this.textContent)">${q}</button>`).join('')}</div>`;
- h+=S.chat.map(m=>`<div class="msg ${m.role}">${fmt(m.text)}</div>`).join('');
+ if(!S.chat.length)h+=`<div class="card"><div class="sm mut" style="margin-bottom:12px">Sprich über deine Ernährung und deinen Lean Bulk oder lass dir Gerichte vorschlagen. Der Coach kennt deine Ziele, deinen bisherigen Tag und die erfassten letzten 14 Tage.</div>${['Was kann ich als Nächstes essen?','Wie war meine Woche bisher?','Esse ich zu viel gesättigtes Fett?'].map(q=>`<button class="full" style="margin-top:8px;text-align:left;border-radius:16px" onclick="A.chatSend(this.textContent)">${q}</button>`).join('')}
+ <button class="full" style="margin-top:8px;text-align:left;border-radius:16px" onclick="A.chatFill('Ich habe zuhause: ')">Ich habe … zuhause, was kann ich kochen?</button></div>`;
+ h+=S.chat.map((m,mi)=>(m.text?`<div class="msg ${m.role}">${fmt(m.text)}</div>`:'')+(m.sug&&m.sug.length?m.sug.map((v,si)=>sugHTML(v,mi,si)).join('')+'<div class="sm mut" style="margin:0 4px 8px">Nährwerte der Vorschläge sind Richtwerte der KI. Bilder: Symbolbilder aus Wikipedia / Wikimedia Commons.</div>':'')).join('');
  if(chatBusy)h+='<div class="msg ai"><div class="spin"></div></div>';
  return h+`<div class="chatin"><textarea id="c_in" placeholder="Nachricht an den Coach" rows="1"></textarea><button class="pri" onclick="A.chatSend()" ${chatBusy?'disabled':''}>Senden</button></div>`}
 
@@ -602,6 +664,7 @@ function vSet(){
  <label>USDA-Schlüssel (optional, <a href="https://fdc.nal.usda.gov/api-key-signup" target="_blank" rel="noopener">kostenlos anfordern</a>)</label><input id="s_usda" value="${esc(S.usda)}" placeholder="leer = Test-Schlüssel mit kleinem Limit" autocomplete="off">
  <div class="row" style="margin-top:10px"><button class="grow" onclick="A.setSave()">Speichern</button></div>
  <div class="sm mut" style="margin-top:8px">Der Schlüssel bleibt nur in diesem Browser gespeichert und wird ausschließlich an die Google-Schnittstelle gesendet.</div></div>
+ ${usageHTML()}
  <div class="card"><h3 style="margin-top:0">Design</h3>
  ${DESIGNS.map(([k,l,t])=>`<button class="dz ${S.ui.design===k?'on':''}" onclick="A.ui('design','${k}')">${l}<small>${t}</small></button>`).join('')}
  <label>Modus</label><div class="seg" style="margin-bottom:6px">${[['auto','Automatisch'],['light','Hell'],['dark','Dunkel']].map(([k,l])=>`<button class="${S.ui.mode===k?'on':''}" onclick="A.ui('mode','${k}')">${l}</button>`).join('')}</div>
@@ -614,16 +677,21 @@ function vSet(){
 
 function render(){
  const v={tag:vTag,neu:vNeu,detail:vDetail,woche:vWoche,day:vDay,coach:vCoach,fav:vFav,set:vSet}[view]||vTag;
- const ap=$('#app'),nv=$('#nav'),an=animNext;animNext=false;ap.classList.remove('anim');nv.classList.remove('anim');
+ const ap=$('#app'),nv=$('#nav'),an=animNext,sd=slideDir;animNext=false;slideDir='';ap.classList.remove('anim','sl','sr');nv.classList.remove('anim');
  ap.innerHTML=v();
  const tab=view==='detail'||view==='fav'?'tag':view==='day'?'woche':view;
  $('#nav').innerHTML=[['neu','cam','Foto'],['tag','hist','Verlauf'],['woche','chart','Statistik'],['coach','chat','Coach'],['set','set','Optionen']].map(([k,i,l])=>`<button class="${tab===k?'on':''}" onclick="A.go('${k}')">${IC(ICO[i])}${l}</button>`).join('');
- if(an){void ap.offsetWidth;ap.classList.add('anim');nv.classList.add('anim');if(!(window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches))countUp()}
+ if(an){void ap.offsetWidth;ap.classList.add('anim');if(sd)ap.classList.add(sd==='l'?'sl':'sr');nv.classList.add('anim');if(!(window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches))countUp()}
 }
 
 /* ---------- Aktionen ---------- */
 const A={
- go(v){if(v==='neu'&&!draft)newDraft();view=v;animNext=true;render();scrollTo(0,0)},
+ go(v){const prev=view,down=LV(prev)-LV(v);
+  if(down>0&&hdepth>0){const k=Math.min(hdepth,down);pend={v,k};try{history.go(-k);return}catch(e){pend=null}}
+  view=v;try{if(LV(v)>LV(prev)){history.pushState(hst(),'');hdepth++}else history.replaceState(hst(),'')}catch(e){}
+  shown()},
+ back(){if(hdepth>0){try{history.back();return}catch(e){}}A.go({detail:'tag',day:'woche',fav:'tag'}[view]||'neu')},
+ lim(v){S.lim=S.lim||{};const n=num(v);if(n>0)S.lim[S.model]=n;else delete S.lim[S.model];save();render()},
  week(n){const k=addD(weekOf,7*n);if(k<=monday(today())){weekOf=k;render()}},
  open(id){detail=id;A.go('detail')},
  async img(inp){for(const f of inp.files){try{draft.imgs.push(await readImg(f))}catch(e){toast(e.message)}}inp.value='';render()},
@@ -672,9 +740,14 @@ const A={
  async chatSend(q){const t=(q||($('#c_in')&&$('#c_in').value)||'').trim();if(!t||chatBusy)return;
   S.chat.push({role:'user',text:t});chatBusy=true;render();scrollTo(0,document.body.scrollHeight);
   try{let h=S.chat.slice(-16);while(h.length&&h[0].role!=='user')h.shift();
-   const a=await coach(h.map(m=>({role:m.role==='ai'?'model':'user',parts:[{text:m.text}]})));S.chat.push({role:'ai',text:a});if(S.chat.length>60)S.chat=S.chat.slice(-60);save()}
+   const a=await coachChat(h.map(m=>({role:m.role==='ai'?'model':'user',parts:[{text:m.role==='ai'?(m.raw||m.text):m.text}]})));
+   S.chat.push({role:'ai',text:a.text,raw:a.raw,sug:a.sug});if(S.chat.length>60)S.chat=S.chat.slice(-60);save()}
   catch(e){S.chat.pop();toast('Fehler: '+e.message)}
-  chatBusy=false;render();scrollTo(0,document.body.scrollHeight)},
+  chatBusy=false;animNext=true;render();
+  const ms=document.querySelectorAll('.msg.user');if(ms.length)ms[ms.length-1].scrollIntoView({block:'start',behavior:'smooth'});
+  loadSugImgs()},
+ chatFill(t){const e=$('#c_in');if(e){e.value=t;e.focus()}},
+ sugLog(mi,si){const v=S.chat[mi]&&S.chat[mi].sug&&S.chat[mi].sug[si];if(!v)return;newDraft();draft.text=v.name+': '+v.ing.map(z=>(z.g?r0(z.g)+' g ':'')+z.name).join(', ');A.go('neu');toast('Zutaten übernommen. Mengen anpassen und analysieren.')},
  chatClear(){S.chat=[];save();render()},
  goals(){['kcal','kh','p','f','fib'].forEach(k=>{const v=num($('#g_'+k).value);if(v>0)S.goals[k]=v});S.profile=$('#g_prof').value.trim()||S.profile;save();toast('Ziele gespeichert')},
  kind(k){if(draft.busy)return;newDraft();draft.kind=k;render()},
@@ -695,7 +768,7 @@ const A={
  async imp(inp){const f=inp.files[0];if(!f)return;try{const j=JSON.parse(await f.text());if(!Array.isArray(j.meals))throw new Error('Keine gültige Sicherung');const key=S.key;S=Object.assign(S,j);S.key=j.key||key;S.ui=Object.assign({design:'edel',mode:'dark',style:'auto'},S.ui||{});save();applyTheme();render();toast('Importiert: '+S.meals.length+' Mahlzeiten')}catch(e){toast('Fehler: '+e.message)}}
 };
 
-load();applyTheme();newDraft();if(!S.key)view='set';render();
+load();applyTheme();newDraft();if(!S.key)view='set';try{history.replaceState(hst(),'')}catch(e){}render();
 </script>
 </body>
 </html>
