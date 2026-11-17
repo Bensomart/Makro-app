@@ -303,6 +303,14 @@ VORGEHEN
 
 `+FORMAT;
 
+let runCtl=null,offDown=false;
+// fetch mit Zeitlimit; bricht auch ab, wenn der Nutzer "Abbrechen" tippt
+async function fetchT(url,opt,ms){const c=new AbortController(),outer=runCtl;let to=false;
+  const t=setTimeout(()=>{to=true;c.abort()},ms);const onA=()=>c.abort();if(outer)outer.signal.addEventListener('abort',onA);
+  try{return await fetch(url,Object.assign({},opt||{},{signal:c.signal}))}
+  catch(e){if(outer&&outer.signal.aborted){const er=new Error(outer.signal.reason||'Abgebrochen.');er.cancel=true;throw er}
+    if(to){const er=new Error('Zeitüberschreitung nach '+Math.round(ms/1000)+' Sekunden');er.timeout=true;er.overload=true;throw er}throw e}
+  finally{clearTimeout(t);if(outer)outer.signal.removeEventListener('abort',onA)}}
 const GS=[{google_search:{}}];
 // Zählt die von dieser App gesendeten Anfragen pro Modell; Googles Tageszähler startet um Mitternacht pazifischer Zeit neu.
 function pacDay(){try{return new Intl.DateTimeFormat('en-CA',{timeZone:'America/Los_Angeles'}).format(new Date())}catch(e){return today()}}
@@ -319,7 +327,7 @@ async function gem(contents,sys,tools,cfg){
   if(tools)body.tools=tools;
   if(cfg)body.generationConfig=cfg;
   const mdl=runModel||S.model;
-  const r=await fetch('https://generativelanguage.googleapis.com/v1beta/models/'+encodeURIComponent(mdl)+':generateContent',{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':S.key},body:JSON.stringify(body)});
+  const r=await fetchT('https://generativelanguage.googleapis.com/v1beta/models/'+encodeURIComponent(mdl)+':generateContent',{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':S.key},body:JSON.stringify(body)},90000);
   useCount(mdl,r);
   const j=await r.json().catch(()=>({}));
   if(!r.ok){const msg=(j.error&&j.error.message)||('HTTP '+r.status),er=new Error(msg);er.overload=r.status===503||r.status===500||/high demand|overloaded|unavailable/i.test(msg);er.quota=r.status===429;er.gone=r.status===404||/no longer available|is not found|not supported for generateContent/i.test(msg);er.daily=er.quota&&/per\s?day|PerDay|daily/i.test(JSON.stringify(j.error||{}));throw er}
@@ -337,7 +345,7 @@ const FOOD={};let dbErr=[];
 const MICID={vitA_ug:1106,vitD_ug:1114,vitE_mg:1109,vitC_mg:1162,b1_mg:1165,b2_mg:1166,b6_mg:1175,b12_ug:1178,folat_ug:1177,calcium_mg:1087,magnesium_mg:1090,eisen_mg:1089,zink_mg:1095,kalium_mg:1092};
 const FN=[{function_declarations:[{name:'suche_lebensmittel',description:'Sucht ein Lebensmittel in zwei Nährwert-Datenbanken und liefert Kandidaten mit id und Nährwerten pro 100 g. usda_query: englischer Suchbegriff für USDA FoodData Central (generische Lebensmittel, mit Zubereitungszustand). off_query: deutscher Suchbegriff für Open Food Facts (Markenprodukte, Fertigprodukte, Backwaren, typisch deutsche Produkte). Mindestens einen der beiden Suchbegriffe angeben.',parameters:{type:'object',properties:{name:{type:'string',description:'Bestandteil der Mahlzeit, für den gesucht wird'},usda_query:{type:'string',description:'z. B. "rice white cooked" oder "chicken breast roasted"'},off_query:{type:'string',description:'z. B. "Apfeltasche Blätterteig"'}},required:['name']}}]}];
 async function usda(q){
-  const r=await fetch('https://api.nal.usda.gov/fdc/v1/foods/search?api_key='+encodeURIComponent(S.usda||'DEMO_KEY')+'&query='+encodeURIComponent(q)+'&dataType='+encodeURIComponent('SR Legacy,Foundation,Survey (FNDDS)')+'&pageSize=8');
+  const r=await fetchT('https://api.nal.usda.gov/fdc/v1/foods/search?api_key='+encodeURIComponent(S.usda||'DEMO_KEY')+'&query='+encodeURIComponent(q)+'&dataType='+encodeURIComponent('SR Legacy,Foundation,Survey (FNDDS)')+'&pageSize=8',null,15000);
   if(!r.ok)throw new Error(r.status===429?'Abfrage-Limit erreicht. Trage in den Einstellungen einen eigenen kostenlosen USDA-Schlüssel ein.':'HTTP '+r.status);
   const j=await r.json();
   return(j.foods||[]).map(f=>{const n={};(f.foodNutrients||[]).forEach(x=>{n[x.nutrientId]=x.value});
@@ -349,17 +357,18 @@ async function usda(q){
 }
 // Open Food Facts: Anfragen nacheinander mit Pause (Limit des Dienstes), Ergebnisse je Suchbegriff merken, zwei Zugänge probieren
 const OFFC={};let offQ=Promise.resolve();
-function off(q){if(OFFC[q])return Promise.resolve(OFFC[q]);const job=offQ.then(()=>offRun(q));offQ=job.catch(()=>{}).then(()=>sleep(900));return job}
-async function offRun(q){let list=null,err=null;
+function off(q){if(OFFC[q])return Promise.resolve(OFFC[q]);if(offDown)return Promise.reject(new Error('übersprungen, weil der Dienst gerade nicht antwortet'));const job=offQ.then(()=>offRun(q));offQ=job.catch(()=>{}).then(()=>sleep(900));return job}
+async function offRun(q){if(offDown)throw new Error('übersprungen, weil der Dienst gerade nicht antwortet');if(runCtl&&runCtl.signal.aborted)throw new Error('abgebrochen');let list=null,err=null;
   const fields='code,product_name,brands,nutriments';
   for(const url of['https://search.openfoodfacts.org/search?q='+encodeURIComponent(q)+'&page_size=10&langs=de&fields='+fields,'https://world.openfoodfacts.org/cgi/search.pl?search_terms='+encodeURIComponent(q)+'&search_simple=1&action=process&json=1&page_size=10&fields='+fields]){
-    try{const r=await fetch(url);if(!r.ok)throw new Error(r.status===429?'Abfrage-Limit erreicht, bitte eine Minute warten.':'HTTP '+r.status);const j=await r.json();list=j.hits||j.products||[];break}catch(e){err=e}}
+    if(err&&err.timeout)break;try{const r=await fetchT(url,null,10000);if(!r.ok)throw new Error(r.status===429?'Abfrage-Limit erreicht, bitte eine Minute warten.':'HTTP '+r.status);const j=await r.json();list=j.hits||j.products||[];break}catch(e){err=e}}
+  if(!list){if(err&&err.cancel)throw err;offDown=true}
   if(!list)throw new Error(err&&err.message==='Failed to fetch'?'nicht erreichbar (vermutlich Abfrage-Limit oder vom Browser blockiert)':(err?err.message:'unbekannter Fehler'));
   const out=list.filter(x=>x&&x.product_name&&x.nutriments&&x.nutriments['energy-kcal_100g']!=null).slice(0,5).map(x=>{const n=x.nutriments,id='off:'+x.code,br=Array.isArray(x.brands)?x.brands.join(', '):x.brands,name=x.product_name+(br?' ('+br+')':'');
     FOOD[id]={name,src:'Open Food Facts',url:'https://world.openfoodfacts.org/product/'+x.code,kcal:num(n['energy-kcal_100g']),kh:num(n.carbohydrates_100g),p:num(n.proteins_100g),f:num(n.fat_100g),fib:num(n.fiber_100g),sug:num(n.sugars_100g),salt:num(n.salt_100g),sat:num(n['saturated-fat_100g']),mono:num(n['monounsaturated-fat_100g']),poly:num(n['polyunsaturated-fat_100g']),mic:null};
     const f=FOOD[id];return{id,name,kcal:r0(f.kcal),kh:r1(f.kh),eiweiss:r1(f.p),fett:r1(f.f)}});
   OFFC[q]=out;return out}
-async function lookup(a){a=a||{};const out={usda:[],off:[]},jobs=[];
+async function lookup(a){a=a||{};if(runCtl&&runCtl.signal.aborted)return{usda:[],off:[]};const out={usda:[],off:[]},jobs=[];
   if(a.usda_query)jobs.push(usda(a.usda_query).then(r=>{out.usda=r}).catch(e=>{out.usda_fehler=e.message;dbErr.push('USDA: '+e.message)}));
   if(a.off_query)jobs.push(off(a.off_query).then(r=>{out.off=r}).catch(e=>{out.off_fehler=e.message;dbErr.push('Open Food Facts: '+e.message)}));
   await Promise.all(jobs);return out}
@@ -368,7 +377,7 @@ async function dbLoop(hist,onStep,sys){
     const o=await gemR(hist,sys||SYS_DB,FN);hist.push(o.content);
     if(!o.calls.length)return o;
     onStep(o.calls.map(c=>c.args&&c.args.name).filter(Boolean));
-    const res=await Promise.all(o.calls.map(c=>lookup(c.args)));
+    const res=await Promise.all(o.calls.map(c=>lookup(c.args)));if(runCtl&&runCtl.signal.aborted){const er=new Error(runCtl.signal.reason||'Abgebrochen.');er.cancel=true;throw er}
     hist.push({role:'user',parts:o.calls.map((c,k)=>({functionResponse:Object.assign({name:c.name,response:res[k]},c.id?{id:c.id}:{})}))});
   }
   throw new Error('Zu viele Suchschritte ohne Ergebnis.');
@@ -466,9 +475,9 @@ async function gemR(c,sy,tl,cfg){let net=0,busy=0,minute=0;const u=usage(),ex=u.
   const tried=new Set([runModel||S.model]);
   for(;;){
     try{return await gem(c,sy,tl,cfg)}
-    catch(e){
+    catch(e){if(e.cancel)throw e;
       if(e instanceof TypeError){if(++net>3)throw new Error('Keine Verbindung zu Google. Prüfe deine Internetverbindung und tippe erneut auf „Analysieren“.');say('Verbindung unterbrochen, neuer Versuch.');await visible();continue}
-      if(e.overload&&busy<2){busy++;say('Das Modell ist gerade überlastet. Neuer Versuch in '+busy*4+' Sekunden.');await sleep(busy*4000);continue}
+      if(e.overload&&busy<2){busy++;say(e.timeout?'Google antwortet nicht. Neuer Versuch in '+busy*4+' Sekunden.':'Das Modell ist gerade überlastet. Neuer Versuch in '+busy*4+' Sekunden.');await sleep(busy*4000);continue}
       if(e.quota&&!e.daily&&minute<1){minute++;say('Limit pro Minute erreicht. Neuer Versuch in 20 Sekunden.');await sleep(20000);continue}
       if(e.overload||e.quota||e.gone){if(e.daily||e.gone){ex[runModel||S.model]=1;save()}
         const nx=FALLBACK.find(m=>!tried.has(m)&&!ex[m]&&avail(m));
@@ -522,7 +531,7 @@ document.addEventListener('touchend',e=>{if(!tOk)return;tOk=false;const t=e.chan
   const n=i+(dx<0?1:-1);if(n<0||n>=TABS.length)return;slideDir=dx<0?'l':'r';A.go(TABS[n])},{passive:true});
 function countUp(){document.querySelectorAll('#app [data-count]').forEach(el=>{const to=+el.dataset.count,t0=performance.now(),D=650;if(!(to>0))return;const f=n=>{const k=Math.min(1,(n-t0)/D),e=1-Math.pow(1-k,3);el.textContent=Math.round(to*e);if(k<1)requestAnimationFrame(f)};requestAnimationFrame(f)})}
 let view='neu',weekOf=monday(today()),draft=null,detail=null,dayKey=today(),fbBusy=false,chatBusy=false;
-function newDraft(){draft={kind:'meal',date:today(),imgs:[],text:'',res:null,src:[],hist:[],busy:false,err:'',corr:''}}
+function newDraft(){draft={kind:'meal',date:today(),imgs:[],text:S.dtext||'',res:null,src:[],hist:[],busy:false,err:'',corr:''}}
 
 /* ---------- Bausteine ---------- */
 function bar(v,g,col){const p=g>0?Math.min(100,v/g*100):0;return `<div class="bar"><i class="${!col&&g>0&&v>g*1.05?'over':''}" style="width:${p}%${col?';background:'+col:''}"></i></div>`}
@@ -618,9 +627,10 @@ function vNeu(){const d=draft;
  <div><label class="btn full" style="text-align:center;color:var(--tx);font-size:16px;margin:0"><span class="ib">${IC(ICO.img,20)} Aus Galerie</span><input type="file" accept="image/*" multiple class="hide" onchange="A.img(this)"></label></div>`}
  ${d.imgs.length?`<div class="imgs">${d.imgs.map((i,n)=>`<div style="background-image:url(${i.url})"><b onclick="A.rmImg(${n})">×</b></div>`).join('')}</div>`:''}
  ${yz?`<label>Tag des Screenshots</label><input type="date" max="${today()}" value="${d.date}" onchange="draft.date=this.value||today()">`:''}
- <label>${yz?'Hinweise (optional)':'Zusatzinfos (Zutaten, Gramm, Zubereitung, Marke, Mensa …)'}</label><textarea ${yz?'style="min-height:56px"':''} placeholder="${yz?'z. B. Die Milch war fettarm':'z. B. Mensa, ca. 250 g Reis, Hähnchen in Butter gebraten'}" oninput="draft.text=this.value">${esc(d.text)}</textarea>
+ <label>${yz?'Hinweise (optional)':'Zusatzinfos (Zutaten, Gramm, Zubereitung, Marke, Mensa …)'}</label><textarea ${yz?'style="min-height:56px"':''} placeholder="${yz?'z. B. Die Milch war fettarm':'z. B. Mensa, ca. 250 g Reis, Hähnchen in Butter gebraten'}" oninput="draft.text=this.value;if(draft.kind==='meal'){S.dtext=this.value;save()}">${esc(d.text)}</textarea>
  <button class="pri full" style="margin-top:14px" onclick="A.analyze()" ${d.busy?'disabled':''}>${d.res?'Neu analysieren':'Analysieren'}</button>
- ${d.busy?`<div class="row" style="margin-top:12px"><div class="spin"></div><span class="sm mut">${esc(d.stage||'')} Das kann bis zu einer Minute dauern. ${canNotify()?'Du kannst kurz in eine andere App wechseln und bekommst eine Benachrichtigung, sobald das Ergebnis da ist.':'Lass die App dabei am besten geöffnet.'}</span></div>`:''}
+ ${d.busy?`<div class="row" style="margin-top:12px"><div class="spin"></div><span class="sm mut">${esc(d.stage||'')} <b class="num" id="elapsed">${Math.round((Date.now()-(d.t0||Date.now()))/1000)} s</b><br>Meist unter einer Minute, höchstens vier. ${canNotify()?'Du kannst kurz in eine andere App wechseln und bekommst eine Benachrichtigung, sobald das Ergebnis da ist.':'Lass die App dabei am besten geöffnet.'}</span></div>
+ <button class="full" style="margin-top:10px" onclick="A.cancel()">Abbrechen</button>`:''}
  ${d.err?`<div class="err">${esc(d.err)}</div>`:''}</div>`;
  if(d.res){h+=`<h2>${esc(d.res.desc)}</h2>`+resultHTML(d.res,d.src)+
  `<div class="card"><h3 style="margin-top:0">Nachkorrigieren</h3><textarea style="min-height:64px" placeholder="z. B. Es war mehr Reis, etwa 300 g. Keine Sauce." oninput="draft.corr=this.value">${esc(d.corr)}</textarea>
@@ -729,6 +739,9 @@ const A={
   if(!corr&&yzCheck(d)){d.err='Bitte zuerst einen Yazio-Screenshot auswählen.';return render()}
   if(!corr&&!d.imgs.length&&!d.text.trim()){d.err='Bitte ein Foto aufnehmen oder die Mahlzeit beschreiben.';return render()}
   const yz=d.kind==='yazio',db=yz||S.mode!=='google';askNotify();runModel=null;usedFallback='';
+  runCtl=new AbortController();offDown=false;offQ=Promise.resolve();d.t0=Date.now();
+  const cap=setTimeout(()=>runCtl&&runCtl.abort('Die Analyse hat länger als 4 Minuten gedauert und wurde abgebrochen. Tippe erneut auf „Analysieren“.'),240000);
+  const tick=setInterval(()=>{const el=document.getElementById('elapsed');if(el)el.textContent=Math.round((Date.now()-d.t0)/1000)+' s'},1000);
   d.busy=true;d.err='';d.stage=yz?'Lese Yazio-Einträge.':db?'Erkenne Bestandteile.':'Schritt 1 von 2: Bestandteile erkennen und Nährwerte online recherchieren.';render();lock();
   const len=d.hist.length;
   const addSrc=o=>{const seen=new Set(d.src.map(s=>s.uri));o.src.forEach(s=>{if(!seen.has(s.uri)){seen.add(s.uri);d.src.push(s)}})};
@@ -755,11 +768,13 @@ const A={
    if(!m){m={id:uid(),date:yz?d.date:today(),done:yz,yazio:yz,ts:Date.now(),thumb:d.imgs[0]?d.imgs[0].thumb:''};d.mealId=m.id;S.meals.push(m)}
    Object.assign(m,{desc:res.desc,tot:res.tot,comps:res.comps,micros:res.micros,notes:res.notes,check:res.check,ask:res.ask,conf:res.conf,src:d.src.slice()});save();
    notify('Analyse fertig',res.desc+' · '+r0(res.tot.kcal)+' kcal');
-  }catch(e){d.err='Fehler: '+e.message;if(corr)d.hist.length=len;notify('Analyse fehlgeschlagen',e.message)}
+  }catch(e){d.err=e.cancel?e.message:'Fehler: '+e.message;if(corr)d.hist.length=len;if(!/^Analyse abgebrochen/.test(e.message))notify('Analyse fehlgeschlagen',e.message)}
+  clearTimeout(cap);clearInterval(tick);runCtl=null;
   d.busy=false;unlock();animNext=!d.err;render();if(usedFallback&&!d.err)toast('Ersatzmodell verwendet: '+usedFallback)},
  analyze(){A.run('')},
+ cancel(){if(runCtl)runCtl.abort('Analyse abgebrochen. Foto und Text sind noch da, tippe erneut auf „Analysieren“.')},
  correct(){const c=(draft.corr||'').trim();if(!c)return toast('Bitte Korrektur eingeben');A.run(c)},
- fresh(){newDraft();render();scrollTo(0,0)},
+ fresh(){S.dtext='';save();newDraft();render();scrollTo(0,0)},
  ui(k,v){S.ui[k]=v;save();applyTheme();render()},
  openDay(k){dayKey=k;A.go('day')},
  async dayFb(){const k=dayKey;fbBusy=true;render();
@@ -778,7 +793,7 @@ const A={
  sugLog(mi,si){const v=S.chat[mi]&&S.chat[mi].sug&&S.chat[mi].sug[si];if(!v)return;newDraft();draft.text=v.name+': '+v.ing.map(z=>(z.g?r0(z.g)+' g ':'')+z.name).join(', ');A.go('neu');toast('Zutaten übernommen. Mengen anpassen und analysieren.')},
  chatClear(){S.chat=[];save();render()},
  goals(){['kcal','kh','p','f','fib'].forEach(k=>{const v=num($('#g_'+k).value);if(v>0)S.goals[k]=v});S.profile=$('#g_prof').value.trim()||S.profile;save();toast('Ziele gespeichert')},
- kind(k){if(draft.busy)return;newDraft();draft.kind=k;render()},
+ kind(k){if(draft.busy)return;newDraft();draft.kind=k;if(k!=='meal')draft.text='';render()},
  favDraft(){const m=S.meals.find(x=>x.id===draft.mealId);if(!m)return;S.favs.unshift(Object.assign(JSON.parse(JSON.stringify(m)),{id:uid()}));save();toast('Als Favorit gespeichert')},
  done(){const m=S.meals.find(x=>x.id===detail);m.done=!m.done;save();render()},
  del(){S.meals=S.meals.filter(x=>x.id!==detail);save();A.go('tag');toast('Gelöscht')},
