@@ -303,7 +303,7 @@ VORGEHEN
 
 `+FORMAT;
 
-let runCtl=null,offDown=false,RLOG=null,RT0=0,forceFinal=false;
+let runCtl=null,offDown=false,RLOG=null,RT0=0,forceFinal=false,ACT=0;   // ACT: aktive Zeit (App sichtbar) in ms
 function lg(m){if(!RLOG)return;RLOG.push(((Date.now()-RT0)/1000).toFixed(1)+' s  '+m);const el=document.getElementById('lastlog');if(el)el.textContent=m}
 // fetch mit Zeitlimit; bricht auch ab, wenn der Nutzer "Abbrechen" tippt
 async function fetchT(url,opt,ms){const c=new AbortController(),outer=runCtl;let to=false;
@@ -328,7 +328,7 @@ async function gem(contents,sys,tools,cfg){
   if(tools)body.tools=tools;
   if(cfg)body.generationConfig=cfg;
   const mdl=runModel||S.model,t0=Date.now();if(forceFinal&&tools)body.tool_config={function_calling_config:{mode:'NONE'}};lg('Gemini '+mdl+': Anfrage gesendet'+(forceFinal?' (letzte Runde, ohne Suche)':''));
-  const r=await fetchT('https://generativelanguage.googleapis.com/v1beta/models/'+encodeURIComponent(mdl)+':generateContent',{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':S.key},body:JSON.stringify(body)},90000);
+  const r=await fetchT('https://generativelanguage.googleapis.com/v1beta/models/'+encodeURIComponent(mdl)+':generateContent',{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':S.key},body:JSON.stringify(body)},60000);
   useCount(mdl,r);lg('Gemini '+mdl+': Antwort '+r.status+' nach '+((Date.now()-t0)/1000).toFixed(1)+' s');
   const j=await r.json().catch(()=>({}));
   if(!r.ok){const msg=(j.error&&j.error.message)||('HTTP '+r.status),er=new Error(msg);er.overload=r.status===503||r.status===500||/high demand|overloaded|unavailable/i.test(msg);er.quota=r.status===429;er.gone=r.status===404||/no longer available|is not found|not supported for generateContent/i.test(msg);er.daily=er.quota&&/per\s?day|PerDay|daily/i.test(JSON.stringify(j.error||{}));throw er}
@@ -378,7 +378,7 @@ async function lookup(a){a=a||{};if(runCtl&&runCtl.signal.aborted)return{usda:[]
 async function dbLoop(hist,onStep,sys){
   // höchstens 3 Suchrunden; danach (oder nach 150 s) muss Gemini mit dem Gefundenen antworten
   for(let i=0;i<5;i++){
-    const late=i>=3||(Date.now()-RT0)>150000;
+    const late=i>=3||ACT>150000;
     if(late){hist.push({role:'user',parts:[{text:'Keine weiteren Suchen. Antworte JETZT ausschließlich mit dem vollständigen JSON-Objekt. Verwende nur ids aus den bisherigen Suchergebnissen, für alles andere quelle_id = null mit schaetzung_pro100g.'}]});forceFinal=true;onStep(null)}
     let o;try{o=await gemR(hist,sys||SYS_DB,FN)}finally{forceFinal=false}
     hist.push(o.content);
@@ -480,13 +480,14 @@ function say(m){lg(m);if(draft&&draft.busy){draft.stage=m;render()}}
 // Robuster Aufruf: Netzabbruch -> bis zu 3 neue Versuche; Überlastung -> 2 Versuche mit Pause, dann Ersatzmodell; Limit erreicht -> Ersatzmodell
 async function gemR(c,sy,tl,cfg){let net=0,busy=0,minute=0;const u=usage(),ex=u.ex||(u.ex={});
   // Modell, dessen Tageslimit heute schon erreicht war, gar nicht erst anfragen
-  if(ex[runModel||S.model]){const nx=FALLBACK.find(m=>!ex[m]&&avail(m));if(nx){runModel=nx;usedFallback=nx}}
+  if(ex[runModel||S.model]){const nx=FALLBACK.find(m=>!ex[m]&&avail(m));if(nx){lg((runModel||S.model)+' ist heute gesperrt (Tageslimit erreicht oder nicht verfügbar), nehme '+nx);runModel=nx;usedFallback=nx}}
   const tried=new Set([runModel||S.model]);
   for(;;){
     try{return await gem(c,sy,tl,cfg)}
     catch(e){if(e.cancel)throw e;
-      if(e instanceof TypeError){if(++net>3)throw new Error('Keine Verbindung zu Google. Prüfe deine Internetverbindung und tippe erneut auf „Analysieren“.');say('Verbindung unterbrochen, neuer Versuch.');await visible();continue}
-      if(e.overload&&!e.timeout&&busy<2){busy++;say(e.timeout?'Google antwortet nicht. Neuer Versuch in '+busy*4+' Sekunden.':'Das Modell ist gerade überlastet. Neuer Versuch in '+busy*4+' Sekunden.');await sleep(busy*4000);continue}
+      if(e instanceof TypeError){if(++net>3)throw new Error('Keine Verbindung zu Google. Prüfe deine Internetverbindung und tippe erneut auf „Analysieren“.');say(document.visibilityState==='visible'?'Verbindung unterbrochen, neuer Versuch.':'Verbindung unterbrochen, weil die App im Hintergrund war. Neuer Versuch, sobald du zurück bist.');await visible();continue}
+      const hasNext=FALLBACK.some(m=>!tried.has(m)&&!ex[m]&&avail(m));
+      if(e.overload&&!e.timeout&&!hasNext&&busy<2){busy++;say(e.timeout?'Google antwortet nicht. Neuer Versuch in '+busy*4+' Sekunden.':'Das Modell ist gerade überlastet. Neuer Versuch in '+busy*4+' Sekunden.');await sleep(busy*4000);continue}
       if(e.quota&&!e.daily&&minute<1){minute++;say('Limit pro Minute erreicht. Neuer Versuch in 20 Sekunden.');await sleep(20000);continue}
       if(e.overload||e.quota||e.gone){if(e.daily||e.gone){ex[runModel||S.model]=1;save()}
         const nx=FALLBACK.find(m=>!tried.has(m)&&!ex[m]&&avail(m));
@@ -638,9 +639,9 @@ function vNeu(){const d=draft;
  ${yz?`<label>Tag des Screenshots</label><input type="date" max="${today()}" value="${d.date}" onchange="draft.date=this.value||today()">`:''}
  <label>${yz?'Hinweise (optional)':'Zusatzinfos (Zutaten, Gramm, Zubereitung, Marke, Mensa …)'}</label><textarea ${yz?'style="min-height:56px"':''} placeholder="${yz?'z. B. Die Milch war fettarm':'z. B. Mensa, ca. 250 g Reis, Hähnchen in Butter gebraten'}" oninput="draft.text=this.value;if(draft.kind==='meal'){S.dtext=this.value;save()}">${esc(d.text)}</textarea>
  <button class="pri full" style="margin-top:14px" onclick="A.analyze()" ${d.busy?'disabled':''}>${d.res?'Neu analysieren':'Analysieren'}</button>
- ${d.busy?`<div class="row" style="margin-top:12px"><div class="spin"></div><span class="sm mut">${esc(d.stage||'')} <span class="sm" id="lastlog" style="display:block;opacity:.8;margin-top:4px"></span><b class="num" id="elapsed">${Math.round((Date.now()-(d.t0||Date.now()))/1000)} s</b><br>Meist unter einer Minute, höchstens vier. ${canNotify()?'Du kannst kurz in eine andere App wechseln und bekommst eine Benachrichtigung, sobald das Ergebnis da ist.':'Lass die App dabei am besten geöffnet.'}</span></div>
+ ${d.busy?`<div class="row" style="margin-top:12px"><div class="spin"></div><span class="sm mut">${esc(d.stage||'')} <span class="sm" id="lastlog" style="display:block;opacity:.8;margin-top:4px"></span><b class="num" id="elapsed">${Math.round(ACT/1000)} s</b><br>Meist unter einer Minute. Bitte lass die App geöffnet: Wechselst du in eine andere App, unterbricht Android die Verbindung und die Analyse dauert länger.</span></div>
  <button class="full" style="margin-top:10px" onclick="A.cancel()">Abbrechen</button>`:''}
- ${d.err?`<div class="err">${esc(d.err)}</div>`:''}${d.log&&d.log.length&&(d.err||d.res)?`<details style="margin-top:10px"><summary class="sm">Technisches Protokoll</summary><pre class="sm mut" style="white-space:pre-wrap;font-size:12px;margin:6px 0">${esc(d.log.join('\n'))}</pre><button class="full" onclick="cp(draft.log.join('\n'))">Protokoll kopieren</button></details>`:''}</div>`;
+ ${d.err?`<div class="err">${esc(d.err)}</div>`:''}${d.log&&d.log.length&&(d.err||d.res)?`<details style="margin-top:10px"><summary class="sm">Technisches Protokoll</summary><pre class="sm mut" style="white-space:pre-wrap;font-size:12px;margin:6px 0;user-select:text;-webkit-user-select:text">${esc(d.log.join('\n'))}</pre><button class="full" onclick="cp(draft.log.join('\n'))">Protokoll kopieren</button></details>`:''}</div>`;
  if(d.res){h+=`<h2>${esc(d.res.desc)}</h2>`+resultHTML(d.res,d.src)+
  `<div class="card"><h3 style="margin-top:0">Nachkorrigieren</h3><textarea style="min-height:64px" placeholder="z. B. Es war mehr Reis, etwa 300 g. Keine Sauce." oninput="draft.corr=this.value">${esc(d.corr)}</textarea>
   <button class="full" style="margin-top:10px" onclick="A.correct()" ${d.busy?'disabled':''}>Mit Korrektur neu berechnen</button></div>
@@ -749,8 +750,10 @@ const A={
   if(!corr&&!d.imgs.length&&!d.text.trim()){d.err='Bitte ein Foto aufnehmen oder die Mahlzeit beschreiben.';return render()}
   const yz=d.kind==='yazio',db=yz||S.mode!=='google';askNotify();runModel=null;usedFallback='';
   runCtl=new AbortController();offDown=false;offQ=Promise.resolve();d.t0=Date.now();RLOG=[];RT0=d.t0;d.log=null;lg('Start ('+(d.imgs.length)+' Bilder, Modell '+S.model+')');
-  const cap=setTimeout(()=>runCtl&&runCtl.abort('Die Analyse hat länger als 4 Minuten gedauert und wurde abgebrochen. Tippe erneut auf „Analysieren“.'),240000);
-  const tick=setInterval(()=>{const el=document.getElementById('elapsed');if(el)el.textContent=Math.round((Date.now()-d.t0)/1000)+' s'},1000);
+  ACT=0;let hidLogged=false;
+  const tick=setInterval(()=>{const vis=document.visibilityState==='visible';if(vis){ACT+=1000;hidLogged=false}else if(!hidLogged){hidLogged=true;lg('App im Hintergrund, Zeitlimit pausiert')}
+    const el=document.getElementById('elapsed');if(el)el.textContent=Math.round(ACT/1000)+' s';
+    if(ACT>240000&&runCtl)runCtl.abort('Die Analyse hat länger als 4 Minuten gedauert und wurde abgebrochen. Tippe erneut auf „Analysieren“.')},1000);
   d.busy=true;d.err='';d.stage=yz?'Lese Yazio-Einträge.':db?'Erkenne Bestandteile.':'Schritt 1 von 2: Bestandteile erkennen und Nährwerte online recherchieren.';render();lock();
   const len=d.hist.length;
   const addSrc=o=>{const seen=new Set(d.src.map(s=>s.uri));o.src.forEach(s=>{if(!seen.has(s.uri)){seen.add(s.uri);d.src.push(s)}})};
@@ -779,7 +782,7 @@ const A={
    notify('Analyse fertig',res.desc+' · '+r0(res.tot.kcal)+' kcal');
   }catch(e){d.err=e.cancel?e.message:'Fehler: '+e.message;if(corr)d.hist.length=len;if(!/^Analyse abgebrochen/.test(e.message))notify('Analyse fehlgeschlagen',e.message)}
   lg(d.err?'Ende mit Fehler: '+d.err:'Fertig');d.log=RLOG;RLOG=null;
-  clearTimeout(cap);clearInterval(tick);runCtl=null;
+  clearInterval(tick);runCtl=null;
   d.busy=false;unlock();animNext=!d.err;render();if(usedFallback&&!d.err)toast('Ersatzmodell verwendet: '+usedFallback)},
  analyze(){A.run('')},
  cancel(){if(runCtl)runCtl.abort('Analyse abgebrochen. Foto und Text sind noch da, tippe erneut auf „Analysieren“.')},
