@@ -199,6 +199,7 @@ details[open] summary::after{content:'–'}
 .msg{max-width:88%;padding:12px 15px;border-radius:20px;margin:8px 0;font-size:15px;line-height:1.55;overflow-wrap:anywhere}
 .msg.user{background:var(--acc);color:var(--onacc);margin-left:auto;border-bottom-right-radius:6px}
 .msg.ai{background:var(--card);border-bottom-left-radius:6px}
+.card .msg.ai{background:var(--btn)}
 .sug{padding:14px}.sugimg{height:150px;border-radius:calc(var(--r) - 8px);margin-bottom:12px;background:var(--track) center/cover}.sugimg:not(.ok){animation:pulse 1.2s ease-in-out infinite}
 @keyframes pulse{50%{opacity:.45}}
 .chatin{display:flex;gap:8px;align-items:flex-end;margin-top:14px}
@@ -485,7 +486,8 @@ async function gemR(c,sy,tl,cfg){let net=0,busy=0,minute=0;const u=usage(),ex=u.
   for(;;){
     try{return await gem(c,sy,tl,cfg)}
     catch(e){if(e.cancel)throw e;
-      if(e instanceof TypeError){if(++net>3)throw new Error('Keine Verbindung zu Google. Prüfe deine Internetverbindung und tippe erneut auf „Analysieren“.');say(document.visibilityState==='visible'?'Verbindung unterbrochen, neuer Versuch.':'Verbindung unterbrochen, weil die App im Hintergrund war. Neuer Versuch, sobald du zurück bist.');await visible();continue}
+      if(e instanceof TypeError){if(++net>5)throw new Error('Keine Verbindung zu Google. Prüfe deine Internetverbindung und tippe erneut auf „Analysieren“.');if(document.visibilityState!=='visible'&&net<=2){say('Verbindung im Hintergrund unterbrochen, neuer Versuch in 3 Sekunden.');await sleep(3000);continue}
+        say(document.visibilityState==='visible'?'Verbindung unterbrochen, neuer Versuch.':'Android lässt die App im Hintergrund gerade nicht ins Netz. Neuer Versuch, sobald du zurück bist.');await visible();continue}
       const hasNext=FALLBACK.some(m=>!tried.has(m)&&!ex[m]&&avail(m));
       if(e.overload&&!e.timeout&&!hasNext&&busy<2){busy++;say(e.timeout?'Google antwortet nicht. Neuer Versuch in '+busy*4+' Sekunden.':'Das Modell ist gerade überlastet. Neuer Versuch in '+busy*4+' Sekunden.');await sleep(busy*4000);continue}
       if(e.quota&&!e.daily&&minute<1){minute++;say('Limit pro Minute erreicht. Neuer Versuch in 20 Sekunden.');await sleep(20000);continue}
@@ -540,15 +542,18 @@ document.addEventListener('touchend',e=>{if(!tOk)return;tOk=false;const t=e.chan
   const i=TABS.indexOf(view);if(i<0){if(dx>0)A.back();return}
   const n=i+(dx<0?1:-1);if(n<0||n>=TABS.length)return;slideDir=dx<0?'l':'r';A.go(TABS[n])},{passive:true});
 function countUp(){document.querySelectorAll('#app [data-count]').forEach(el=>{const to=+el.dataset.count,t0=performance.now(),D=650;if(!(to>0))return;const f=n=>{const k=Math.min(1,(n-t0)/D),e=1-Math.pow(1-k,3);el.textContent=Math.round(to*e);if(k<1)requestAnimationFrame(f)};requestAnimationFrame(f)})}
+let coachTab='c',wBusy=false,wfbBusy=false,wProg='',wcBusy=false;
 let view='neu',weekOf=monday(today()),draft=null,detail=null,dayKey=today(),fbBusy=false,chatBusy=false;
-function newDraft(){draft={kind:'meal',date:today(),imgs:[],text:S.dtext||'',res:null,src:[],hist:[],busy:false,err:'',corr:''}}
+function newDraft(){if(S.dtext&&!(Date.now()-(S.dtextTs||0)<3*3600000)){S.dtext='';save()}
+ draft={kind:'meal',date:today(),imgs:[],text:S.dtext||'',res:null,src:[],hist:[],busy:false,err:'',corr:''}}
 
 /* ---------- Bausteine ---------- */
 function bar(v,g,col){const p=g>0?Math.min(100,v/g*100):0;return `<div class="bar"><i class="${!col&&g>0&&v>g*1.05?'over':''}" style="width:${p}%${col?';background:'+col:''}"></i></div>`}
 function macroBars(t){const g=S.goals;return `<div class="row" style="gap:14px;margin-top:12px">${[['Kohlenhydr.',t.kh,g.kh,'var(--kh)'],['Eiweiß',t.p,g.p,'var(--pr)'],['Fett',t.f,g.f,'var(--ft)']].map(x=>`<div class="mac"><span class="sm mut">${x[0]}</span>${bar(x[1],x[2],x[3])}<b class="num">${r0(x[1])} / ${x[2]} g</b></div>`).join('')}</div>`}
 const fmt=t=>esc(t).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/^\s*[*-]\s+/gm,'• ').replace(/\n/g,'<br>');
 /* ---------- Coach ---------- */
-function ctx(){const g=S.goals,tt=dayData(today()).t,now=new Date();let s='JETZT: '+now.toLocaleDateString('de-DE',{weekday:'long'})+', '+String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0')+' Uhr.\nHEUTE NOCH OFFEN BIS ZUM ZIEL (nur aus den erfassten Einträgen berechnet): '+r0(g.kcal-tt.kcal)+' kcal, '+r0(g.kh-tt.kh)+' g Kohlenhydrate, '+r0(g.p-tt.p)+' g Eiweiß, '+r0(g.f-tt.f)+' g Fett, '+r0(g.fib-tt.fib)+' g Ballaststoffe (negative Werte = Ziel schon überschritten).\n'+'PROFIL UND ZIEL: '+S.profile+'\nTAGESZIELE: '+g.kcal+' kcal, '+g.kh+' g Kohlenhydrate, '+g.p+' g Eiweiß, '+g.f+' g Fett, '+g.fib+' g Ballaststoffe.\nHEUTE IST: '+today()+'\n\nERFASSTE TAGE (letzte 14 Tage; enthalten ist nur, was in der App erfasst wurde, Tage können unvollständig sein):\n';let any=false;
+function ctx(){return ctx0()+wCtx()}
+function ctx0(){const g=S.goals,tt=dayData(today()).t,now=new Date();let s='JETZT: '+now.toLocaleDateString('de-DE',{weekday:'long'})+', '+String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0')+' Uhr.\nHEUTE NOCH OFFEN BIS ZUM ZIEL (nur aus den erfassten Einträgen berechnet): '+r0(g.kcal-tt.kcal)+' kcal, '+r0(g.kh-tt.kh)+' g Kohlenhydrate, '+r0(g.p-tt.p)+' g Eiweiß, '+r0(g.f-tt.f)+' g Fett, '+r0(g.fib-tt.fib)+' g Ballaststoffe (negative Werte = Ziel schon überschritten).\n'+'PROFIL UND ZIEL: '+S.profile+'\nTAGESZIELE: '+g.kcal+' kcal, '+g.kh+' g Kohlenhydrate, '+g.p+' g Eiweiß, '+g.f+' g Fett, '+g.fib+' g Ballaststoffe.\nHEUTE IST: '+today()+'\n\nERFASSTE TAGE (letzte 14 Tage; enthalten ist nur, was in der App erfasst wurde, Tage können unvollständig sein):\n';let any=false;
  for(let i=0;i<14;i++){const k=addD(today(),-i),d=dayData(k);if(!d.has)continue;any=true;const t=d.t;
   s+=k+': '+r0(t.kcal)+' kcal, KH '+r0(t.kh)+' g, Eiweiß '+r0(t.p)+' g, Fett '+r0(t.f)+' g'+(t.sat+t.mono+t.poly>0?' (gesättigt '+r1(t.sat)+' g, einfach ungesättigt '+r1(t.mono)+' g, mehrfach ungesättigt '+r1(t.poly)+' g)':'')+', Ballaststoffe '+r1(t.fib)+' g, Zucker '+r1(t.sug)+' g, Salz '+r1(t.salt)+' g. Mikronährstoffe in % der DGE-Empfehlung für Männer (0 kann auch "keine Daten" heißen): '+MIC.map(([key,n,u,ref])=>n+' '+r0(d.mic[key]/ref*100)).join(', ')+'. Einträge: '+d.ms.map(m=>m.desc+' ['+m.comps.map(c=>c.name+' '+r0(c.g)+' g').join(', ')+']').join(' | ')+'\n'}
  return s+(any?'':'(noch keine Tage erfasst)\n')}
@@ -591,6 +596,55 @@ function sugHTML(v,mi,si){return `<div class="card sug">${v.img===''?'':`<div cl
  <details style="margin-top:10px"><summary>Zutaten und Zubereitung</summary><ul class="sm" style="margin:6px 0;padding-left:18px">${v.ing.map(z=>`<li>${z.g?r0(z.g)+' g ':''}${esc(z.name)}</li>`).join('')}</ul>${v.steps.length?`<ol class="sm" style="margin:6px 0;padding-left:18px">${v.steps.map(x=>`<li>${esc(x)}</li>`).join('')}</ol>`:''}</details>
  <button class="full" style="margin-top:12px" onclick="A.sugLog(${mi},${si})">Gegessen? Als Mahlzeit erfassen</button></div>`}
 async function coach(msgs){runModel=S.cmodel&&S.cmodel!==S.model?S.cmodel:null;usedFallback='';const o=await gemR(msgs,COACH+ctx(),null);return o.text.trim()}
+
+/* ---------- Gewicht ---------- */
+// Zielbereiche für die Zunahme in % des Körpergewichts pro Monat (Faustregeln nach Trainingserfahrung, siehe Hinweis in der App)
+const WLEV={anf:['Anfänger (bis 2 Jahre Training)',1,1.5],fort:['Fortgeschritten (2 bis 4 Jahre)',0.5,1],erf:['Erfahren (über 4 Jahre)',0.25,0.5]};
+const KCAL_KG=7700;   // grobe Energiemenge pro kg Körpergewicht
+function wlist(){return(S.weights||[]).slice().sort((a,b)=>(a.d+a.t).localeCompare(b.d+b.t))}
+function dnum(k){return Math.round(parseD(k).getTime()/86400000)}
+function wDaily(){const m={};wlist().forEach(w=>{(m[w.d]=m[w.d]||[]).push(w.kg)});return Object.keys(m).sort().map(d=>({d,kg:m[d].reduce((a,b)=>a+b,0)/m[d].length}))}
+function wWeeks(){const m={};wDaily().forEach(x=>{const k=monday(x.d);(m[k]=m[k]||[]).push(x.kg)});return Object.keys(m).sort().map(k=>({k,n:m[k].length,avg:m[k].reduce((a,b)=>a+b,0)/m[k].length}))}
+// Trend: lineare Regression über die Tageswerte der letzten 28 Tage
+function wTrend(){const ds=wDaily().filter(x=>dnum(x.d)>=dnum(today())-27&&(!S.wstart||x.d>=S.wstart));if(ds.length<4)return null;const span=dnum(ds[ds.length-1].d)-dnum(ds[0].d);if(span<10)return null;
+  const xs=ds.map(x=>dnum(x.d)),ys=ds.map(x=>x.kg),n=xs.length,mx=xs.reduce((a,b)=>a+b)/n,my=ys.reduce((a,b)=>a+b)/n;
+  let sxy=0,sxx=0;xs.forEach((x,i)=>{sxy+=(x-mx)*(ys[i]-my);sxx+=(x-mx)*(x-mx)});const sl=sxx?sxy/sxx:0;
+  return{perDay:sl,perMonth:sl*30.4,pct:sl*30.4/my*100,avg:my,n,span}}
+function wAdvice(){const tr=wTrend(),lv=WLEV[S.wlevel||'fort'];if(!tr)return null;
+  const lo=lv[1],hi=lv[2],pct=tr.pct;let st,delta=0;
+  if(pct<lo){st='unter';delta=((lo+hi)/2-pct)/100*tr.avg*KCAL_KG/30.4}
+  else if(pct>hi){st='ueber';delta=((lo+hi)/2-pct)/100*tr.avg*KCAL_KG/30.4}
+  else st='im';
+  delta=Math.max(-300,Math.min(300,Math.round(delta/50)*50));
+  return{tr,lo,hi,st,delta,loKg:lo/100*tr.avg,hiKg:hi/100*tr.avg}}
+function wNotes(){const n=(S.wchat||[]).filter(m=>m.role==='user').slice(-15);return n.length?'ERKLÄRUNGEN DES NUTZERS ZUM GEWICHTSVERLAUF (unbedingt berücksichtigen): '+n.map(m=>'['+m.d+'] '+m.text).join(' | ')+'\n':''}
+function wCtx(){const ws=wWeeks().slice(-8),a=wAdvice();if(!ws.length)return'GEWICHT: keine Messungen erfasst.\n'+wNotes();
+  return(S.wstart?'LEAN BULK / TRENDBERECHNUNG AB: '+S.wstart+'\n':'')+wNotes()+'GEWICHT (Wochendurchschnitte, älteste zuerst): '+ws.map(w=>w.k+': '+w.avg.toFixed(1)+' kg ('+w.n+' Tage)').join('; ')+'.\n'+(a?'TREND letzte 28 Tage: '+(a.tr.perMonth>=0?'+':'')+a.tr.perMonth.toFixed(2)+' kg pro Monat ('+a.tr.pct.toFixed(2)+' % des Körpergewichts). Zielbereich für '+WLEV[S.wlevel||'fort'][0]+': '+a.lo+' bis '+a.hi+' % pro Monat ('+a.loKg.toFixed(2)+' bis '+a.hiKg.toFixed(2)+' kg). Status: '+{unter:'unter dem Zielbereich',im:'im Zielbereich',ueber:'über dem Zielbereich'}[a.st]+'. Rechnerische Anpassung: '+(a.delta>0?'+':'')+a.delta+' kcal pro Tag.\n':'TREND: noch zu wenige Messungen (mindestens 4 Tage über 10 Tage verteilt).\n')}
+const SYS_W=`Du bekommst Screenshots aus einer App mit Gewichtsmessungen (Liste oder Diagramm). Lies JEDE einzelne Messung mit Datum, Uhrzeit und Gewicht ab.
+HEUTE IST: __HEUTE__ (__WOCHENTAG__).
+- "Heute" = __HEUTE__, "Gestern" = der Tag davor. Datumsangaben ohne Jahr gehören in das Jahr, in dem das Datum am nächsten vor oder an HEUTE liegt.
+- Nur Messungen mit eindeutig lesbarem Gewicht. Aus Diagrammen nur, wenn die Werte als Zahl dastehen, keine Punkte aus Linien schätzen.
+- Kommas sind Dezimaltrennzeichen (72,1 kg = 72.1).
+Antworte AUSSCHLIESSLICH mit JSON: {"eintraege":[{"datum":"YYYY-MM-DD","zeit":"HH:MM","kg":0}]}`;
+async function readWeights(imgs){runModel=S.cmodel&&S.cmodel!==S.model?S.cmodel:null;usedFallback='';const d=new Date();
+  const sys=SYS_W.replaceAll('__HEUTE__',today()).replace('__WOCHENTAG__',d.toLocaleDateString('de-DE',{weekday:'long'}));
+  const o=await gemR([{role:'user',parts:[...imgs.map(i=>({inline_data:{mime_type:i.mime,data:i.data}})),{text:'Lies alle Gewichtsmessungen ab.'}]}],sys,null,{responseMimeType:'application/json'});
+  const j=parseJSON(o.text);return(Array.isArray(j.eintraege)?j.eintraege:[]).map(e=>({d:String(e.datum||''),t:String(e.zeit||'00:00').slice(0,5),kg:num(e.kg)})).filter(e=>/^\d{4}-\d\d-\d\d$/.test(e.d)&&e.d<=today()&&e.kg>25&&e.kg<300)}
+function addWeights(list){S.weights=S.weights||[];let n=0,u=0;list.forEach(e=>{const i=S.weights.findIndex(w=>w.d===e.d&&w.t===e.t);if(i<0){S.weights.push(e);n++}else if(S.weights[i].kg!==e.kg){S.weights[i]=e;u++}});save();return[n,u]}
+function weightChart(){const ds=wDaily().filter(x=>dnum(x.d)>=dnum(today())-55);if(ds.length<2)return'<div class="sm mut" style="padding:20px 0;text-align:center">Für den Verlauf braucht es mindestens zwei Messungen.</div>';
+  const W=340,H=190,pl=6,pr=34,pt=10,pb=22,x0=dnum(ds[0].d),x1=Math.max(dnum(today()),x0+7);
+  const ra=ds.map((x,i)=>{const w=ds.filter(y=>dnum(y.d)<=dnum(x.d)&&dnum(y.d)>dnum(x.d)-7);return{d:x.d,kg:w.reduce((a,b)=>a+b.kg,0)/w.length}});
+  const a=wAdvice();let band='';
+  let mn=Math.min(...ds.map(x=>x.kg)),mx=Math.max(...ds.map(x=>x.kg));
+  if(a){const st=ra[ra.length-1],sx=dnum(st.d),ex=sx+14;const yl=st.kg+a.loKg/30.4*14,yh=st.kg+a.hiKg/30.4*14;mx=Math.max(mx,yh);band={sx,ex,y0:st.kg,yl,yh}}
+  mn=Math.floor(mn-0.3);mx=Math.ceil(mx+0.3);const X1=band?Math.max(x1,band.ex):x1;
+  const X=d=>pl+(d-x0)/(X1-x0)*(W-pl-pr),Y=v=>pt+(mx-v)/(mx-mn)*(H-pt-pb);
+  let g='';for(let v=mn;v<=mx;v++)g+=`<line x1="${pl}" x2="${W-pr}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--line)" stroke-width="1"/><text x="${W-pr+4}" y="${Y(v)+4}" font-size="10" fill="var(--mut)">${v}</text>`;
+  for(let d=x0;d<=X1;d++){const k=dkey(new Date(d*86400000+43200000));if(parseD(k).getDay()===1)g+=`<line x1="${X(d)}" x2="${X(d)}" y1="${pt}" y2="${H-pb}" stroke="var(--line)" stroke-dasharray="2 3"/><text x="${X(d)+2}" y="${H-6}" font-size="10" fill="var(--mut)">${parseD(k).getDate()}.${parseD(k).getMonth()+1}.</text>`}
+  if(band)g+=`<polygon points="${X(band.sx)},${Y(band.y0)} ${X(band.ex)},${Y(band.yh)} ${X(band.ex)},${Y(band.yl)}" fill="var(--acc)" opacity=".14"/>`;
+  g+=`<polyline fill="none" stroke="var(--acc)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round" points="${ra.map(x=>X(dnum(x.d))+','+Y(x.kg)).join(' ')}"/>`;
+  g+=ds.map(x=>`<circle cx="${X(dnum(x.d))}" cy="${Y(x.kg)}" r="3" fill="var(--bg)" stroke="var(--mut)" stroke-width="1.5"/>`).join('');
+  return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block">${g}</svg><div class="sm mut" style="margin-top:6px">Punkte: Tageswerte · Linie: 7-Tage-Durchschnitt${band?' · Fläche: dein Zielbereich für die nächsten 2 Wochen':''}</div>`}
 
 function macroGrid(t){return `<div class="grid4" style="text-align:center;margin-top:10px">${[['kcal',r0(t.kcal)],['Kohlenhydr.',r0(t.kh)+' g'],['Eiweiß',r0(t.p)+' g'],['Fett',r0(t.f)+' g']].map(x=>`<div><b class="num" style="font-size:20px">${x[1]}</b><br><span class="sm mut">${x[0]}</span></div>`).join('')}</div>`}
 function mealRow(m){return `<div class="meal" onclick="A.open('${m.id}')"><div class="th" style="${m.thumb?`background-image:url(${m.thumb})`:''}">${m.thumb?'':IC(ICO.plate)}</div>
@@ -637,9 +691,9 @@ function vNeu(){const d=draft;
  <div><label class="btn full" style="text-align:center;color:var(--tx);font-size:16px;margin:0"><span class="ib">${IC(ICO.img,20)} Aus Galerie</span><input type="file" accept="image/*" multiple class="hide" onchange="A.img(this)"></label></div>`}
  ${d.imgs.length?`<div class="imgs">${d.imgs.map((i,n)=>`<div style="background-image:url(${i.url})"><b onclick="A.rmImg(${n})">×</b></div>`).join('')}</div>`:''}
  ${yz?`<label>Tag des Screenshots</label><input type="date" max="${today()}" value="${d.date}" onchange="draft.date=this.value||today()">`:''}
- <label>${yz?'Hinweise (optional)':'Zusatzinfos (Zutaten, Gramm, Zubereitung, Marke, Mensa …)'}</label><textarea ${yz?'style="min-height:56px"':''} placeholder="${yz?'z. B. Die Milch war fettarm':'z. B. Mensa, ca. 250 g Reis, Hähnchen in Butter gebraten'}" oninput="draft.text=this.value;if(draft.kind==='meal'){S.dtext=this.value;save()}">${esc(d.text)}</textarea>
+ <label>${yz?'Hinweise (optional)':'Zusatzinfos (Zutaten, Gramm, Zubereitung, Marke, Mensa …)'}</label><textarea ${yz?'style="min-height:56px"':''} placeholder="${yz?'z. B. Die Milch war fettarm':'z. B. Mensa, ca. 250 g Reis, Hähnchen in Butter gebraten'}" oninput="draft.text=this.value;if(draft.kind==='meal'&&!draft.res){S.dtext=this.value;S.dtextTs=Date.now();save()}">${esc(d.text)}</textarea>
  <button class="pri full" style="margin-top:14px" onclick="A.analyze()" ${d.busy?'disabled':''}>${d.res?'Neu analysieren':'Analysieren'}</button>
- ${d.busy?`<div class="row" style="margin-top:12px"><div class="spin"></div><span class="sm mut">${esc(d.stage||'')} <span class="sm" id="lastlog" style="display:block;opacity:.8;margin-top:4px"></span><b class="num" id="elapsed">${Math.round(ACT/1000)} s</b><br>Meist unter einer Minute. Bitte lass die App geöffnet: Wechselst du in eine andere App, unterbricht Android die Verbindung und die Analyse dauert länger.</span></div>
+ ${d.busy?`<div class="row" style="margin-top:12px"><div class="spin"></div><span class="sm mut">${esc(d.stage||'')} <span class="sm" id="lastlog" style="display:block;opacity:.8;margin-top:4px"></span><b class="num" id="elapsed">${Math.round(ACT/1000)} s</b><br>Meist unter einer Minute. ${canNotify()?'Du kannst in eine andere App wechseln; ist die Analyse fertig, bekommst du eine Benachrichtigung. Garantiert ist das nicht: Hält Android die App an, läuft sie weiter, sobald du zurück bist. Am schnellsten geht es, wenn die App offen bleibt.':'Lass die App am besten geöffnet. Erlaube Benachrichtigungen, dann meldet sie sich, wenn sie im Hintergrund fertig wird.'}</span></div>
  <button class="full" style="margin-top:10px" onclick="A.cancel()">Abbrechen</button>`:''}
  ${d.err?`<div class="err">${esc(d.err)}</div>`:''}${d.log&&d.log.length&&(d.err||d.res)?`<details style="margin-top:10px"><summary class="sm">Technisches Protokoll</summary><pre class="sm mut" style="white-space:pre-wrap;font-size:12px;margin:6px 0;user-select:text;-webkit-user-select:text">${esc(d.log.join('\n'))}</pre><button class="full" onclick="cp(draft.log.join('\n'))">Protokoll kopieren</button></details>`:''}</div>`;
  if(d.res){h+=`<h2>${esc(d.res.desc)}</h2>`+resultHTML(d.res,d.src)+
@@ -689,8 +743,40 @@ function vDay(){const k=dayKey,d=dayData(k),t=d.t,g=S.goals,fk=t.sat+t.mono+t.po
  <div class="card"><h3 style="margin-top:0">Einträge</h3>${d.ms.length?d.ms.map(mealRow).join(''):'<div class="sm mut">Keine Einträge.</div>'}</div>`;
  return h}
 
-function vCoach(){
- let h=`<div class="row sp"><h1>Coach</h1>${S.chat.length?'<button onclick="A.chatClear()">Neu beginnen</button>':''}</div>`;
+function vCoach(){const seg=`<div class="seg" style="margin-bottom:6px"><button class="${coachTab!=='w'?'on':''}" onclick="A.ctab('c')">Chat</button><button class="${coachTab==='w'?'on':''}" onclick="A.ctab('w')">Gewicht</button></div>`;
+ if(coachTab==='w')return vWeight(seg);
+ return vChat(seg)}
+function vWeight(seg){const a=wAdvice(),ws=wWeeks().slice().reverse(),lv=S.wlevel||'fort',g=S.goals;
+ let h=`<h1>Coach</h1>${seg}
+ <div class="card"><div class="row sp"><h3 style="margin:0">Messungen hinzufügen</h3></div>
+  <label class="btn full" style="text-align:center;font-size:16px;font-weight:700;margin:10px 0 0;background:var(--acc);color:var(--onacc)"><span class="ib">${IC(ICO.img,20)} ${wBusy?'Lese Screenshots … '+wProg:'Screenshots der Waage-App'}</span><input type="file" accept="image/*" multiple class="hide" onchange="A.wshot(this)" ${wBusy?'disabled':''}></label>
+  <div class="row" style="margin-top:10px;gap:8px"><input id="w_d" type="date" max="${today()}" value="${today()}" style="flex:1.3"><input id="w_kg" inputmode="decimal" placeholder="kg" style="flex:1"><button onclick="A.wadd()">+</button></div></div>
+ <div class="card"><h3 style="margin-top:0">Erklärungen an den Coach</h3>
+  ${(S.wchat||[]).length?'':'<div class="sm mut" style="margin-bottom:8px">Erkläre, was die Zahlen nicht zeigen, z. B. „Die ersten zwei Wochen gehen schnell hoch, weil ich direkt aus einer Diät komme“ oder „Am 14.11. war ich auf einer Feier“. Der Coach berücksichtigt das bei jeder Einschätzung und im Chat.</div>'}
+  ${(S.wchat||[]).length>6?`<details><summary class="sm">Ältere Nachrichten (${S.wchat.length-6})</summary>${S.wchat.slice(0,-6).map(wmsg).join('')}</details>`:''}${(S.wchat||[]).slice(-6).map(wmsg).join('')}
+  ${wcBusy?'<div class="msg ai"><div class="spin"></div></div>':''}
+  <div class="chatin" style="margin-top:8px"><textarea id="wc_in" rows="1" placeholder="z. B. Bin direkt aus einer Diät gekommen"></textarea><button class="pri" onclick="A.wchat()" ${wcBusy?'disabled':''}>Senden</button></div></div>`;
+ if(!(S.weights||[]).length)return h+'<div class="card sm mut">Lade Screenshots deiner Gewichtsmessungen hoch (mehrere auf einmal möglich) oder trage ein Gewicht von Hand ein. Am aussagekräftigsten ist täglich morgens nüchtern nach dem Toilettengang wiegen.</div>';
+ h+=`<div class="card"><h3 style="margin-top:0">Verlauf (8 Wochen)</h3>${weightChart()}</div>`;
+ if(a){const col={unter:'var(--kh)',im:'var(--pr)',ueber:'var(--warn)'}[a.st],txt={unter:'Unter dem Zielbereich',im:'Im Zielbereich',ueber:'Über dem Zielbereich'}[a.st];
+  h+=`<div class="card"><div class="row sp"><h3 style="margin:0">Lean-Bulk-Check</h3><span class="tag" style="color:${col};border-color:${col}">${txt}</span></div>
+  <div class="row sp" style="margin-top:12px"><div><div class="big num">${a.tr.perMonth>=0?'+':''}${a.tr.perMonth.toFixed(2)}</div><div class="sm mut">kg pro Monat (${a.tr.pct>=0?'+':''}${a.tr.pct.toFixed(1)} %)</div></div><div style="text-align:right"><div class="big num" style="color:var(--acc)">${a.loKg.toFixed(1)}–${a.hiKg.toFixed(1)}</div><div class="sm mut">Ziel kg pro Monat</div></div></div>
+  <div class="sm" style="margin-top:12px;line-height:1.55">${a.st==='im'?`Du nimmst im empfohlenen Tempo zu. Behalte deine ${g.kcal} kcal bei.`:`Empfehlung: Tagesziel um <b>${a.delta>0?'+':''}${a.delta} kcal</b> auf <b>${g.kcal+a.delta} kcal</b> ${a.delta>0?'erhöhen':'senken'}, dann zwei Wochen beobachten.`}</div>
+  ${a.st!=='im'&&a.delta?`<button class="full" style="margin-top:10px" onclick="A.wapply(${a.delta})">Kalorienziel auf ${g.kcal+a.delta} kcal setzen</button>`:''}
+  <div class="sm mut" style="margin-top:10px">Trend aus ${a.tr.n} Messtagen der letzten 28 Tage. Zielbereich ${a.lo}–${a.hi} % des Körpergewichts pro Monat für „${WLEV[lv][0]}“. Die Kalorien-Anpassung ist eine Faustrechnung (etwa 7.700 kcal pro kg), gedeckelt auf ±300 kcal.</div></div>`}
+ else h+=`<div class="card sm mut">Für eine Einschätzung braucht es mindestens 4 Messtage, die über mindestens 10 Tage verteilt sind. Einzelne Tage schwanken durch Wasser, Salz und Darminhalt um bis zu 1 bis 2 kg.</div>`;
+ h+=`<div class="card"><h3 style="margin-top:0">Beratung</h3>${S.wfb?`<div class="sm" style="line-height:1.6">${fmt(S.wfb.text)}</div><div class="sm mut" style="margin-top:6px">Stand ${fmtD(S.wfb.d)}</div>`:'<div class="sm mut">Einschätzung deines Lean Bulks mit Blick auf Gewichtsverlauf und erfasste Ernährung.</div>'}
+  ${wfbBusy?'<div class="row" style="margin-top:12px"><div class="spin"></div><span class="sm mut">Werte aus.</span></div>':`<button class="full" style="margin-top:12px" onclick="A.wfb()">${S.wfb?'Beratung aktualisieren':'Beratung holen'}</button>`}</div>`;
+ h+=`<div class="card"><h3 style="margin-top:0">Wochendurchschnitte</h3>${ws.map((w,i)=>{const p=ws[i+1],df=p?w.avg-p.avg:null,e=addD(w.k,6);return `<div class="row sp" style="padding:9px 0;border-top:${i?'1px solid var(--line)':'0'}"><div><b>${parseD(w.k).toLocaleDateString('de-DE',{day:'numeric',month:'short'})} – ${parseD(e).toLocaleDateString('de-DE',{day:'numeric',month:'short'})}</b><div class="sm mut">${w.n} ${w.n===1?'Messtag':'Messtage'}</div></div><div style="text-align:right"><b class="num">${w.avg.toFixed(1)} kg</b><div class="sm num" style="color:${df==null?'var(--mut)':df>0?'var(--pr)':'var(--kh)'}">${df==null?'–':(df>=0?'+':'')+df.toFixed(2)+' kg'}</div></div></div>`}).join('')}</div>
+ <div class="card"><details><summary>Einstellungen und Grundlage</summary>
+  <label>Trainingserfahrung (bestimmt den Zielbereich)</label><select onchange="A.wlev(this.value)">${Object.entries(WLEV).map(([k,v])=>`<option value="${k}" ${k===lv?'selected':''}>${v[0]}: ${v[1]}–${v[2]} % pro Monat</option>`).join('')}</select>
+  <label>Trend erst ab diesem Datum berechnen (optional, z. B. Ende der Diät oder Beginn des Lean Bulks)</label><div class="row" style="gap:8px"><input type="date" max="${today()}" value="${S.wstart||''}" onchange="A.wstart(this.value)" style="flex:1">${S.wstart?'<button onclick="A.wstart(\'\')">Zurücksetzen</button>':''}</div>
+  <div class="sm mut" style="margin-top:10px;line-height:1.55">Eine Übersichtsarbeit zu Bodybuildern in der Aufbauphase (Iraki, Helms u. a., 2019) nennt für Einsteiger und Fortgeschrittene etwa 0,25–0,5 % des Körpergewichts pro Woche, für Erfahrene weniger, und empfiehlt, Wochendurchschnitte statt Einzelwerte zu vergleichen. Die Stufen hier sind vorsichtigere Faustregeln aus der Coaching-Praxis. Bei 72 kg entspricht 1 % etwa 0,7 kg pro Monat.</div></details></div>
+ <div class="card"><details><summary>Alle Messungen (${S.weights.length})</summary>${wlist().reverse().map(w=>`<div class="row sp" style="padding:7px 0;border-top:1px solid var(--line)"><span class="sm">${fmtD(w.d)}${w.t&&w.t!=='00:00'?', '+w.t:''}</span><span class="row" style="gap:6px"><b class="num">${w.kg.toFixed(1)} kg</b><button class="ghost dng" style="min-height:0;padding:4px 8px" onclick="A.wdel('${w.d}','${w.t}')">×</button></span></div>`).join('')}</details></div>`;
+ return h}
+function wmsg(m,i){return `<div class="msg ${m.role}" style="font-size:14px">${fmt(m.text)}<div style="font-size:11px;opacity:.6;margin-top:4px">${fmtD(m.d)}</div></div>`}
+function vChat(seg){
+ let h=`<div class="row sp"><h1>Coach</h1>${S.chat.length?'<button onclick="A.chatClear()">Neu beginnen</button>':''}</div>`+seg;
  if(!S.chat.length)h+=`<div class="card"><div class="sm mut" style="margin-bottom:12px">Sprich über deine Ernährung und deinen Lean Bulk oder lass dir Gerichte vorschlagen. Der Coach kennt deine Ziele, deinen bisherigen Tag und die erfassten letzten 14 Tage.</div>${['Was kann ich als Nächstes essen?','Wie war meine Woche bisher?','Esse ich zu viel gesättigtes Fett?'].map(q=>`<button class="full" style="margin-top:8px;text-align:left;border-radius:16px" onclick="A.chatSend(this.textContent)">${q}</button>`).join('')}
  <button class="full" style="margin-top:8px;text-align:left;border-radius:16px" onclick="A.chatFill('Ich habe zuhause: ')">Ich habe … zuhause, was kann ich kochen?</button></div>`;
  h+=S.chat.map((m,mi)=>(m.text?`<div class="msg ${m.role}">${fmt(m.text)}</div>`:'')+(m.sug&&m.sug.length?m.sug.map((v,si)=>sugHTML(v,mi,si)).join('')+'<div class="sm mut" style="margin:0 4px 8px">Nährwerte der Vorschläge sind Richtwerte der KI. Bilder: Symbolbilder aus Wikipedia / Wikimedia Commons.</div>':'')).join('');
@@ -779,6 +865,7 @@ const A={
    let m=S.meals.find(x=>x.id===d.mealId);
    if(!m){m={id:uid(),date:yz?d.date:today(),done:yz,yazio:yz,ts:Date.now(),thumb:d.imgs[0]?d.imgs[0].thumb:''};d.mealId=m.id;S.meals.push(m)}
    Object.assign(m,{desc:res.desc,tot:res.tot,comps:res.comps,micros:res.micros,notes:res.notes,check:res.check,ask:res.ask,conf:res.conf,src:d.src.slice()});save();
+   S.dtext='';save();
    notify('Analyse fertig',res.desc+' · '+r0(res.tot.kcal)+' kcal');
   }catch(e){d.err=e.cancel?e.message:'Fehler: '+e.message;if(corr)d.hist.length=len;if(!/^Analyse abgebrochen/.test(e.message))notify('Analyse fehlgeschlagen',e.message)}
   lg(d.err?'Ende mit Fehler: '+d.err:'Fertig');d.log=RLOG;RLOG=null;
@@ -805,6 +892,27 @@ const A={
  chatFill(t){const e=$('#c_in');if(e){e.value=t;e.focus()}},
  sugLog(mi,si){const v=S.chat[mi]&&S.chat[mi].sug&&S.chat[mi].sug[si];if(!v)return;newDraft();draft.text=v.name+': '+v.ing.map(z=>(z.g?r0(z.g)+' g ':'')+z.name).join(', ');A.go('neu');toast('Zutaten übernommen. Mengen anpassen und analysieren.')},
  chatClear(){S.chat=[];save();render()},
+ ctab(t){coachTab=t;animNext=true;render()},
+ async wshot(inp){const fs=[...inp.files];inp.value='';if(!fs.length)return;wBusy=true;render();
+  let tot=0,nn=0,uu=0,bad=0;
+  try{for(let i=0;i<fs.length;i+=3){wProg=fs.length>3?'Paket '+(i/3+1)+' von '+Math.ceil(fs.length/3):'';render();const imgs=[];for(const f of fs.slice(i,i+3))imgs.push(await readImg(f));
+    try{const l=await readWeights(imgs);if(!l.length){bad++;continue}const[n,u]=addWeights(l);tot+=l.length;nn+=n;uu+=u}catch(e){bad++;if(i+3>=fs.length&&!tot)throw e}}
+   if(!tot)throw new Error('In den Screenshots wurden keine Gewichtsmessungen erkannt.');
+   toast(tot+' Messungen gelesen: '+nn+' neu'+(uu?', '+uu+' geändert':'')+(bad?'. '+bad+(bad===1?' Paket':' Pakete')+' ohne Ergebnis, bitte erneut hochladen':''))}
+  catch(e){toast('Fehler: '+e.message)}wProg='';wBusy=false;animNext=true;render()},
+ wadd(){const d=$('#w_d').value,kg=num($('#w_kg').value);if(!d||!(kg>25&&kg<300))return toast('Bitte Datum und Gewicht eingeben');const t=d===today()?new Date().toTimeString().slice(0,5):'08:00';addWeights([{d,t,kg}]);animNext=true;render();toast('Gewicht gespeichert')},
+ wdel(d,t){S.weights=(S.weights||[]).filter(w=>!(w.d===d&&w.t===t));save();render()},
+ wlev(v){S.wlevel=v;save();render()},
+ wstart(v){S.wstart=v||'';save();render();toast(v?'Trend wird ab '+fmtD(v)+' berechnet':'Trend wieder über die letzten 28 Tage')},
+ async wchat(){const el=$('#wc_in'),t=(el&&el.value||'').trim();if(!t||wcBusy)return;S.wchat=S.wchat||[];S.wchat.push({role:'user',text:t,d:today()});save();wcBusy=true;render();
+  try{const h=S.wchat.slice(-10).map(m=>({role:m.role==='ai'?'model':'user',parts:[{text:m.text}]}));while(h.length&&h[0].role!=='user')h.shift();
+   h[h.length-1].parts[0].text+='\n\n(Antworte in 2 bis 4 Sätzen: Bestätige kurz, was du dir merkst, und sage, was das für die Bewertung meines Gewichtsverlaufs bedeutet. Schlage gegebenenfalls vor, die Trendberechnung erst ab einem bestimmten Datum zu starten; das kann ich im Gewichts-Tab unter „Einstellungen und Grundlage“ einstellen.)';
+   const a=await coach(h);S.wchat.push({role:'ai',text:a,d:today()});if(S.wchat.length>80)S.wchat=S.wchat.slice(-80);save()}
+  catch(e){toast('Fehler: '+e.message)}wcBusy=false;render()},
+ wapply(dl){const g=S.goals;g.kcal+=dl;g.kh=Math.max(0,Math.round(g.kh+dl/4));save();animNext=true;render();toast('Neues Ziel: '+g.kcal+' kcal, Kohlenhydrate '+g.kh+' g. In Yazio bitte ebenfalls anpassen.')},
+ async wfb(){wfbBusy=true;render();
+  try{const t=await coach([{role:'user',parts:[{text:'Bewerte meinen Lean Bulk anhand der Gewichtsdaten. Gliedere in drei kurze Absätze: 1. wie der Trend aussieht (Wochendurchschnitte, kg pro Monat gegen den Zielbereich), 2. ob ich die Kalorien anpassen sollte und um wie viel (orientiere dich an der rechnerischen Anpassung, begründe Abweichungen), 3. ein bis zwei konkrete Tipps, z. B. zu Eiweiß, Training oder Messroutine. Weise darauf hin, wenn zu wenige Messungen oder Ernährungsdaten vorliegen.'}]}]);S.wfb={d:today(),text:t};save()}
+  catch(e){toast('Fehler: '+e.message)}wfbBusy=false;render()},
  goals(){['kcal','kh','p','f','fib'].forEach(k=>{const v=num($('#g_'+k).value);if(v>0)S.goals[k]=v});S.profile=$('#g_prof').value.trim()||S.profile;save();toast('Ziele gespeichert')},
  kind(k){if(draft.busy)return;newDraft();draft.kind=k;if(k!=='meal')draft.text='';render()},
  favDraft(){const m=S.meals.find(x=>x.id===draft.mealId);if(!m)return;S.favs.unshift(Object.assign(JSON.parse(JSON.stringify(m)),{id:uid()}));save();toast('Als Favorit gespeichert')},
