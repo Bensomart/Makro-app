@@ -545,7 +545,7 @@ document.addEventListener('touchend',e=>{if(!tOk)return;tOk=false;const t=e.chan
   const i=TABS.indexOf(view);if(i<0){if(dx>0)A.back();return}
   const n=i+(dx<0?1:-1);if(n<0||n>=TABS.length)return;slideDir=dx<0?'l':'r';A.go(TABS[n])},{passive:true});
 function countUp(){document.querySelectorAll('#app [data-count]').forEach(el=>{const to=+el.dataset.count,t0=performance.now(),D=650;if(!(to>0))return;const f=n=>{const k=Math.min(1,(n-t0)/D),e=1-Math.pow(1-k,3);el.textContent=Math.round(to*e);if(k<1)requestAnimationFrame(f)};requestAnimationFrame(f)})}
-let wcOpen=false,wBig=false,wRange='8w',wSel=null,coachTab='c',wBusy=false,wfbBusy=false,wProg='',wcBusy=false;
+let wfbOpen=false,wcOpen=false,wBig=false,wRange='8w',wSel=null,coachTab='c',wBusy=false,wfbBusy=false,wProg='',wcBusy=false;
 let view='neu',weekOf=monday(today()),draft=null,detail=null,dayKey=today(),fbBusy=false,chatBusy=false;
 function newDraft(){if(S.dtext&&!(Date.now()-(S.dtextTs||0)<3*3600000)){S.dtext='';save()}
  draft={kind:'meal',date:today(),imgs:[],text:S.dtext||'',res:null,src:[],hist:[],busy:false,err:'',corr:''}}
@@ -794,8 +794,10 @@ function vWeight(seg){if(wBig)return vWeightBig();const a=wAdvice(),ws=wWeeks().
   ${a.st!=='im'&&a.delta?`<button class="full" style="margin-top:10px" onclick="A.wapply(${a.delta})">Kalorienziel auf ${g.kcal+a.delta} kcal setzen</button>`:''}
   <div class="sm mut" style="margin-top:10px">Trend aus ${a.tr.n} Messtagen der letzten 28 Tage. Zielbereich ${a.lo}–${a.hi} % des Körpergewichts pro Monat für „${WLEV[lv][0]}“. Die Kalorien-Anpassung ist eine Faustrechnung (etwa 7.700 kcal pro kg), gedeckelt auf ±300 kcal.</div></div>`}
  else h+=`<div class="card sm mut">Für eine Einschätzung braucht es mindestens 4 Messtage, die über mindestens 10 Tage verteilt sind. Einzelne Tage schwanken durch Wasser, Salz und Darminhalt um bis zu 1 bis 2 kg.</div>`;
- h+=`<div class="card"><h3 style="margin-top:0">Beratung</h3>${S.wfb?`<div class="sm" style="line-height:1.6">${fmt(S.wfb.text)}</div><div class="sm mut" style="margin-top:6px">Stand ${fmtD(S.wfb.d)}</div>`:'<div class="sm mut">Einschätzung deines Lean Bulks mit Blick auf Gewichtsverlauf und erfasste Ernährung.</div>'}
-  ${wfbBusy?'<div class="row" style="margin-top:12px"><div class="spin"></div><span class="sm mut">Werte aus.</span></div>':`<button class="full" style="margin-top:12px" onclick="A.wfb()">${S.wfb?'Beratung aktualisieren':'Beratung holen'}</button>`}</div>`;
+ h+=`<div class="card"><details ${wfbOpen||!S.wfb||wfbBusy?'open':''} ontoggle="wfbOpen=this.open"><summary><span>Beratung${S.wfb?` <span class="sm mut">· ${fmtD(S.wfb.d)}</span>`:''}</span></summary>
+  ${S.wfb?`<div class="sm" style="line-height:1.6;margin-top:8px">${fmt(S.wfb.text)}</div>`:'<div class="sm mut" style="margin-top:8px">Einschätzung deines Lean Bulks mit Blick auf Gewichtsverlauf und erfasste Ernährung.</div>'}
+  ${wfbBusy?'<div class="row" style="margin-top:12px"><div class="spin"></div><span class="sm mut">Werte aus.</span></div>':`<button class="full" style="margin-top:12px" onclick="A.wfb()">${S.wfb?'Beratung aktualisieren':'Beratung holen'}</button>`}</details>
+  ${S.wfb&&!wfbOpen&&!wfbBusy?`<div class="sm mut ell" style="margin-top:6px">${esc(S.wfb.text.replace(/\*\*/g,'').split(/(?<=[.!?])\s/)[0])}</div>`:''}</div>`;
  h+=`<div class="card"><h3 style="margin-top:0">Wochendurchschnitte</h3>${a?`<div class="sm mut" style="margin-bottom:6px">Zielbereich pro Woche: +${(a.loKg/4.35).toFixed(2)} bis +${(a.hiKg/4.35).toFixed(2)} kg. Einzelne Wochen schwanken stärker, entscheide erst nach zwei bis drei Wochen.</div>`:''}${ws.map((w,i)=>{const p=ws[i+1],df=p?w.avg-p.avg:null,e=addD(w.k,6);return `<div class="row sp" style="padding:9px 0;border-top:${i?'1px solid var(--line)':'0'}"><div><b>${parseD(w.k).toLocaleDateString('de-DE',{day:'numeric',month:'short'})} – ${parseD(e).toLocaleDateString('de-DE',{day:'numeric',month:'short'})}</b><div class="sm mut">${w.n} ${w.n===1?'Messtag':'Messtage'}</div></div><div style="text-align:right"><b class="num">${w.avg.toFixed(1)} kg</b><div class="sm num" style="color:${df==null?'var(--mut)':df>0?'var(--pr)':'var(--kh)'}">${df==null?'–':(df>=0?'+':'')+df.toFixed(2)+' kg'}</div></div></div>`}).join('')}</div>
  <div class="card"><details><summary>Einstellungen und Grundlage</summary>
   <label>Trainingserfahrung (bestimmt den Zielbereich)</label><select onchange="A.wlev(this.value)">${Object.entries(WLEV).map(([k,v])=>`<option value="${k}" ${k===lv?'selected':''}>${v[0]}: ${v[1]}–${v[2]} % pro Monat</option>`).join('')}</select>
@@ -942,7 +944,7 @@ const A={
    const a=await coach(h);S.wchat.push({role:'ai',text:a,d:today()});if(S.wchat.length>80)S.wchat=S.wchat.slice(-80);save()}
   catch(e){toast('Fehler: '+e.message)}wcBusy=false;render()},
  wapply(dl){const g=S.goals;g.kcal+=dl;g.kh=Math.max(0,Math.round(g.kh+dl/4));save();animNext=true;render();toast('Neues Ziel: '+g.kcal+' kcal, Kohlenhydrate '+g.kh+' g. In Yazio bitte ebenfalls anpassen.')},
- async wfb(){wfbBusy=true;render();
+ async wfb(){wfbBusy=true;wfbOpen=true;render();
   try{const t=await coach([{role:'user',parts:[{text:'Bewerte meinen Lean Bulk anhand der Gewichtsdaten. Gliedere in drei kurze Absätze: 1. wie der Trend aussieht (Wochendurchschnitte, kg pro Monat gegen den Zielbereich), 2. ob ich die Kalorien anpassen sollte und um wie viel (orientiere dich an der rechnerischen Anpassung, begründe Abweichungen), 3. ein bis zwei konkrete Tipps, z. B. zu Eiweiß, Training oder Messroutine. Weise darauf hin, wenn zu wenige Messungen oder Ernährungsdaten vorliegen.'}]}]);S.wfb={d:today(),text:t};save()}
   catch(e){toast('Fehler: '+e.message)}wfbBusy=false;render()},
  goals(){['kcal','kh','p','f','fib'].forEach(k=>{const v=num($('#g_'+k).value);if(v>0)S.goals[k]=v});S.profile=$('#g_prof').value.trim()||S.profile;save();toast('Ziele gespeichert')},
